@@ -1,0 +1,14 @@
+{
+  "name": "johnethel-lessons-app",
+  "version": "0.1.0",
+  "deps": {
+    "golemcloud/golem_sdk": "0.5.0",
+    "golemcloud/golem_sdk_tools": "0.5.0"
+  },
+  "readme": "README.md",
+  "repository": "",
+  "license": "",
+  "keywords": [],
+  "description": "",
+  "preferred-target": "wasm"
+}

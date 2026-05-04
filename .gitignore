@@ -1,0 +1,12 @@
+.DS_Store
+target/
+.mooncakes/
+.moonagent/
+_build/
+golem-temp/
+.agents/
+frontend/.mooncakes/
+.claude
+history.txt
+ui/dist/
+*.wasm

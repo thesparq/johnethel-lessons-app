@@ -1,0 +1,83 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "johnethel-lessons-app/api"
+
+import {
+  "golemcloud/golem_sdk/interface/golem/agent/common",
+  "golemcloud/golem_sdk/interface/golem/agent/host",
+  "golemcloud/golem_sdk/interface/golem/core/types",
+  "golemcloud/golem_sdk/interface/wasi/clocks/wallClock",
+  "golemcloud/golem_sdk/rpc",
+}
+
+// Values
+pub fn cabi_realloc(Int, Int, Int, Int) -> Int
+
+pub fn wasmExportDiscoverAgentTypes() -> Int
+
+pub fn wasmExportDiscoverAgentTypesPostReturn(Int) -> Unit
+
+pub fn wasmExportGetDefinition() -> Int
+
+pub fn wasmExportGetDefinitionPostReturn(Int) -> Unit
+
+pub fn wasmExportInitialize(Int) -> Int
+
+pub fn wasmExportInitializePostReturn(Int) -> Unit
+
+pub fn wasmExportInvoke(Int) -> Int
+
+pub fn wasmExportInvokePostReturn(Int) -> Unit
+
+pub fn wasmExportLoad(Int, Int, Int, Int) -> Int
+
+pub fn wasmExportLoadPostReturn(Int) -> Unit
+
+pub fn wasmExportSave() -> Int
+
+pub fn wasmExportSavePostReturn(Int) -> Unit
+
+// Errors
+
+// Types and methods
+type ApiAgent
+pub fn ApiAgent::assign_teacher(Self, String, String, String) -> String raise @common.AgentError
+pub fn ApiAgent::get_lesson(Self, String, String) -> String raise @common.AgentError
+pub fn ApiAgent::get_lessons(Self, String, String) -> String raise @common.AgentError
+pub fn ApiAgent::get_subjects(Self, String) -> String raise @common.AgentError
+pub fn ApiAgent::toggle_lesson(Self, String, String) -> String raise @common.AgentError
+
+pub(all) struct ApiAgentClient {
+  client : @rpc.AgentClient
+}
+pub fn ApiAgentClient::assign_teacher(Self, String, String, String) -> String raise @common.AgentError
+pub fn ApiAgentClient::drop(Self) -> Unit
+pub fn ApiAgentClient::get_agent_id(Self) -> String raise @common.AgentError
+pub fn ApiAgentClient::get_lesson(Self, String, String) -> String raise @common.AgentError
+pub fn ApiAgentClient::get_lessons(Self, String, String) -> String raise @common.AgentError
+pub fn ApiAgentClient::get_phantom(@types.Uuid) -> Self raise @common.AgentError
+pub fn ApiAgentClient::get_subjects(Self, String) -> String raise @common.AgentError
+pub fn ApiAgentClient::new_phantom() -> Self raise @common.AgentError
+pub fn ApiAgentClient::phantom_id(Self) -> @types.Uuid?
+pub fn ApiAgentClient::schedule_assign_teacher(Self, @wallClock.Datetime, String, String, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::schedule_cancelable_assign_teacher(Self, @wallClock.Datetime, String, String, String) -> @host.CancellationToken raise @common.AgentError
+pub fn ApiAgentClient::schedule_cancelable_get_lesson(Self, @wallClock.Datetime, String, String) -> @host.CancellationToken raise @common.AgentError
+pub fn ApiAgentClient::schedule_cancelable_get_lessons(Self, @wallClock.Datetime, String, String) -> @host.CancellationToken raise @common.AgentError
+pub fn ApiAgentClient::schedule_cancelable_get_subjects(Self, @wallClock.Datetime, String) -> @host.CancellationToken raise @common.AgentError
+pub fn ApiAgentClient::schedule_cancelable_toggle_lesson(Self, @wallClock.Datetime, String, String) -> @host.CancellationToken raise @common.AgentError
+pub fn ApiAgentClient::schedule_get_lesson(Self, @wallClock.Datetime, String, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::schedule_get_lessons(Self, @wallClock.Datetime, String, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::schedule_get_subjects(Self, @wallClock.Datetime, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::schedule_toggle_lesson(Self, @wallClock.Datetime, String, String) -> Unit raise @common.AgentError
+pub fn[T] ApiAgentClient::scoped_get_phantom(@types.Uuid, (Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn[T] ApiAgentClient::scoped_new_phantom((Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn ApiAgentClient::toggle_lesson(Self, String, String) -> String raise @common.AgentError
+pub fn ApiAgentClient::trigger_assign_teacher(Self, String, String, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::trigger_get_lesson(Self, String, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::trigger_get_lessons(Self, String, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::trigger_get_subjects(Self, String) -> Unit raise @common.AgentError
+pub fn ApiAgentClient::trigger_toggle_lesson(Self, String, String) -> Unit raise @common.AgentError
+
+// Type aliases
+
+// Traits
+

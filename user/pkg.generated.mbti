@@ -1,0 +1,85 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "johnethel-lessons-app/user"
+
+import {
+  "golemcloud/golem_sdk/interface/golem/agent/common",
+  "golemcloud/golem_sdk/interface/golem/agent/host",
+  "golemcloud/golem_sdk/interface/golem/core/types",
+  "golemcloud/golem_sdk/interface/wasi/clocks/wallClock",
+  "golemcloud/golem_sdk/rpc",
+}
+
+// Values
+pub fn cabi_realloc(Int, Int, Int, Int) -> Int
+
+pub fn wasmExportDiscoverAgentTypes() -> Int
+
+pub fn wasmExportDiscoverAgentTypesPostReturn(Int) -> Unit
+
+pub fn wasmExportGetDefinition() -> Int
+
+pub fn wasmExportGetDefinitionPostReturn(Int) -> Unit
+
+pub fn wasmExportInitialize(Int) -> Int
+
+pub fn wasmExportInitializePostReturn(Int) -> Unit
+
+pub fn wasmExportInvoke(Int) -> Int
+
+pub fn wasmExportInvokePostReturn(Int) -> Unit
+
+pub fn wasmExportLoad(Int, Int, Int, Int) -> Int
+
+pub fn wasmExportLoadPostReturn(Int) -> Unit
+
+pub fn wasmExportSave() -> Int
+
+pub fn wasmExportSavePostReturn(Int) -> Unit
+
+// Errors
+
+// Types and methods
+type UserAgent
+pub fn UserAgent::get_lesson(Self, String) -> String
+pub fn UserAgent::get_lessons(Self, String) -> String
+pub fn UserAgent::get_subjects(Self) -> String
+pub fn UserAgent::is_lesson_active(Self, String) -> Bool
+pub fn UserAgent::toggle_lesson(Self, String) -> Bool
+
+pub(all) struct UserAgentClient {
+  client : @rpc.AgentClient
+}
+pub fn UserAgentClient::drop(Self) -> Unit
+pub fn UserAgentClient::get(String, String) -> Self raise @common.AgentError
+pub fn UserAgentClient::get_agent_id(Self) -> String raise @common.AgentError
+pub fn UserAgentClient::get_lesson(Self, String) -> String raise @common.AgentError
+pub fn UserAgentClient::get_lessons(Self, String) -> String raise @common.AgentError
+pub fn UserAgentClient::get_phantom(String, String, @types.Uuid) -> Self raise @common.AgentError
+pub fn UserAgentClient::get_subjects(Self) -> String raise @common.AgentError
+pub fn UserAgentClient::is_lesson_active(Self, String) -> Bool raise @common.AgentError
+pub fn UserAgentClient::new_phantom(String, String) -> Self raise @common.AgentError
+pub fn UserAgentClient::phantom_id(Self) -> @types.Uuid?
+pub fn UserAgentClient::schedule_cancelable_get_lesson(Self, @wallClock.Datetime, String) -> @host.CancellationToken raise @common.AgentError
+pub fn UserAgentClient::schedule_cancelable_get_lessons(Self, @wallClock.Datetime, String) -> @host.CancellationToken raise @common.AgentError
+pub fn UserAgentClient::schedule_cancelable_get_subjects(Self, @wallClock.Datetime) -> @host.CancellationToken
+pub fn UserAgentClient::schedule_cancelable_is_lesson_active(Self, @wallClock.Datetime, String) -> @host.CancellationToken raise @common.AgentError
+pub fn UserAgentClient::schedule_cancelable_toggle_lesson(Self, @wallClock.Datetime, String) -> @host.CancellationToken raise @common.AgentError
+pub fn UserAgentClient::schedule_get_lesson(Self, @wallClock.Datetime, String) -> Unit raise @common.AgentError
+pub fn UserAgentClient::schedule_get_lessons(Self, @wallClock.Datetime, String) -> Unit raise @common.AgentError
+pub fn UserAgentClient::schedule_get_subjects(Self, @wallClock.Datetime) -> Unit
+pub fn UserAgentClient::schedule_is_lesson_active(Self, @wallClock.Datetime, String) -> Unit raise @common.AgentError
+pub fn UserAgentClient::schedule_toggle_lesson(Self, @wallClock.Datetime, String) -> Unit raise @common.AgentError
+pub fn[T] UserAgentClient::scoped(String, String, (Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn[T] UserAgentClient::scoped_get_phantom(String, String, @types.Uuid, (Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn[T] UserAgentClient::scoped_new_phantom(String, String, (Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn UserAgentClient::toggle_lesson(Self, String) -> Bool raise @common.AgentError
+pub fn UserAgentClient::trigger_get_lesson(Self, String) -> Unit raise @common.AgentError
+pub fn UserAgentClient::trigger_get_lessons(Self, String) -> Unit raise @common.AgentError
+pub fn UserAgentClient::trigger_get_subjects(Self) -> Unit
+pub fn UserAgentClient::trigger_is_lesson_active(Self, String) -> Unit raise @common.AgentError
+pub fn UserAgentClient::trigger_toggle_lesson(Self, String) -> Unit raise @common.AgentError
+
+// Type aliases
+
+// Traits
+
