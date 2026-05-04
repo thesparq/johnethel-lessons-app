@@ -1,0 +1,14 @@
+{
+  "name": "johnethel-frontend",
+  "version": "0.1.0",
+  "readme": "README.md",
+  "repository": "",
+  "license": "",
+  "keywords": [],
+  "description": "",
+  "preferred-target": "js",
+  "supported-targets": ["js"],
+  "deps": {
+    "moonbit-community/rabbita": "0.12.2"
+  }
+}

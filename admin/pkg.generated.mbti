@@ -1,0 +1,75 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "johnethel-lessons-app/admin"
+
+import {
+  "golemcloud/golem_sdk/interface/golem/agent/common",
+  "golemcloud/golem_sdk/interface/golem/agent/host",
+  "golemcloud/golem_sdk/interface/golem/core/types",
+  "golemcloud/golem_sdk/interface/wasi/clocks/wallClock",
+  "golemcloud/golem_sdk/rpc",
+}
+
+// Values
+pub fn cabi_realloc(Int, Int, Int, Int) -> Int
+
+pub fn wasmExportDiscoverAgentTypes() -> Int
+
+pub fn wasmExportDiscoverAgentTypesPostReturn(Int) -> Unit
+
+pub fn wasmExportGetDefinition() -> Int
+
+pub fn wasmExportGetDefinitionPostReturn(Int) -> Unit
+
+pub fn wasmExportInitialize(Int) -> Int
+
+pub fn wasmExportInitializePostReturn(Int) -> Unit
+
+pub fn wasmExportInvoke(Int) -> Int
+
+pub fn wasmExportInvokePostReturn(Int) -> Unit
+
+pub fn wasmExportLoad(Int, Int, Int, Int) -> Int
+
+pub fn wasmExportLoadPostReturn(Int) -> Unit
+
+pub fn wasmExportSave() -> Int
+
+pub fn wasmExportSavePostReturn(Int) -> Unit
+
+// Errors
+
+// Types and methods
+type AdminAgent
+pub fn AdminAgent::assign_teacher(Self, String, String) -> Bool
+pub fn AdminAgent::get_teacher_for_subject(Self, String) -> String
+pub fn AdminAgent::spawn_user(Self, String, String, String) -> Bool
+
+pub(all) struct AdminAgentClient {
+  client : @rpc.AgentClient
+}
+pub fn AdminAgentClient::assign_teacher(Self, String, String) -> Bool raise @common.AgentError
+pub fn AdminAgentClient::drop(Self) -> Unit
+pub fn AdminAgentClient::get() -> Self raise @common.AgentError
+pub fn AdminAgentClient::get_agent_id(Self) -> String raise @common.AgentError
+pub fn AdminAgentClient::get_phantom(@types.Uuid) -> Self raise @common.AgentError
+pub fn AdminAgentClient::get_teacher_for_subject(Self, String) -> String raise @common.AgentError
+pub fn AdminAgentClient::new_phantom() -> Self raise @common.AgentError
+pub fn AdminAgentClient::phantom_id(Self) -> @types.Uuid?
+pub fn AdminAgentClient::schedule_assign_teacher(Self, @wallClock.Datetime, String, String) -> Unit raise @common.AgentError
+pub fn AdminAgentClient::schedule_cancelable_assign_teacher(Self, @wallClock.Datetime, String, String) -> @host.CancellationToken raise @common.AgentError
+pub fn AdminAgentClient::schedule_cancelable_get_teacher_for_subject(Self, @wallClock.Datetime, String) -> @host.CancellationToken raise @common.AgentError
+pub fn AdminAgentClient::schedule_cancelable_spawn_user(Self, @wallClock.Datetime, String, String, String) -> @host.CancellationToken raise @common.AgentError
+pub fn AdminAgentClient::schedule_get_teacher_for_subject(Self, @wallClock.Datetime, String) -> Unit raise @common.AgentError
+pub fn AdminAgentClient::schedule_spawn_user(Self, @wallClock.Datetime, String, String, String) -> Unit raise @common.AgentError
+pub fn[T] AdminAgentClient::scoped((Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn[T] AdminAgentClient::scoped_get_phantom(@types.Uuid, (Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn[T] AdminAgentClient::scoped_new_phantom((Self) -> T raise @common.AgentError) -> T raise @common.AgentError
+pub fn AdminAgentClient::spawn_user(Self, String, String, String) -> Bool raise @common.AgentError
+pub fn AdminAgentClient::trigger_assign_teacher(Self, String, String) -> Unit raise @common.AgentError
+pub fn AdminAgentClient::trigger_get_teacher_for_subject(Self, String) -> Unit raise @common.AgentError
+pub fn AdminAgentClient::trigger_spawn_user(Self, String, String, String) -> Unit raise @common.AgentError
+
+// Type aliases
+
+// Traits
+

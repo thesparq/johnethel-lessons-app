@@ -1,0 +1,116 @@
+# Schema for IDEA:
+# $schema: https://schema.golem.cloud/app/golem/1.5.0-rc2/golem.schema.json
+# Schema for vscode-yaml:
+# yaml-language-server: $schema=https://schema.golem.cloud/app/golem/1.5.0-rc2/golem.schema.json
+
+# Field reference: https://learn.golem.cloud/app-manifest#field-reference
+# Creating HTTP APIs: https://learn.golem.cloud/invoke/making-custom-apis
+
+manifestVersion: 1.5.0
+
+app: johnethel-lessons-app
+
+environments:
+  local:
+    server: local
+    componentPresets: debug
+  cloud:
+    server: cloud
+    componentPresets: release
+components:
+  johnethel-lessons-app:api:
+    dir: api
+    templates: moonbit
+    buildMergeMode: replace
+    build:
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk api
+        dir: ..
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents api
+        dir: ..
+      - command: moon build --target wasm
+        dir: ..
+      - command: sh -c "wasm-tools component embed .mooncakes/golemcloud/golem_sdk/wit _build/wasm/debug/build/api/api.wasm --encoding utf16 --output _build/wasm/debug/api.agent.wasm"
+        dir: ..
+        mkdirs: [_build/wasm/debug]
+      - command: wasm-tools component new _build/wasm/debug/api.agent.wasm --output _build/wasm/debug/api.agent.wasm
+        dir: ..
+    componentWasm: ../_build/wasm/debug/api.agent.wasm
+    env:
+
+  johnethel-lessons-app:user:
+    dir: user
+    templates: moonbit
+    buildMergeMode: replace
+    build:
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk user
+        dir: ..
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents user
+        dir: ..
+      - command: moon build --target wasm
+        dir: ..
+      - command: sh -c "wasm-tools component embed .mooncakes/golemcloud/golem_sdk/wit _build/wasm/debug/build/user/user.wasm --encoding utf16 --output _build/wasm/debug/user.agent.wasm"
+        dir: ..
+        mkdirs: [_build/wasm/debug]
+      - command: wasm-tools component new _build/wasm/debug/user.agent.wasm --output _build/wasm/debug/user.agent.wasm
+        dir: ..
+    componentWasm: ../_build/wasm/debug/user.agent.wasm
+    env:
+      SURREALDB_URL: "http://localhost:8000"
+      SURREALDB_NS: "johnethel"
+      SURREALDB_DB: "lessons"
+      SURREALDB_TOKEN: "root"
+
+  johnethel-lessons-app:admin:
+    dir: admin
+    templates: moonbit
+    buildMergeMode: replace
+    build:
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk admin
+        dir: ..
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents admin
+        dir: ..
+      - command: moon build --target wasm
+        dir: ..
+      - command: sh -c "wasm-tools component embed .mooncakes/golemcloud/golem_sdk/wit _build/wasm/debug/build/admin/admin.wasm --encoding utf16 --output _build/wasm/debug/admin.agent.wasm"
+        dir: ..
+        mkdirs: [_build/wasm/debug]
+      - command: wasm-tools component new _build/wasm/debug/admin.agent.wasm --output _build/wasm/debug/admin.agent.wasm
+        dir: ..
+    componentWasm: ../_build/wasm/debug/admin.agent.wasm
+    env:
+
+  johnethel-lessons-app:static:
+    dir: static
+    templates: moonbit
+    buildMergeMode: replace
+    build:
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk static
+        dir: ..
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents static
+        dir: ..
+      - command: moon build --target wasm
+        dir: ..
+      - command: sh -c "wasm-tools component embed .mooncakes/golemcloud/golem_sdk/wit _build/wasm/debug/build/static/static.wasm --encoding utf16 --output _build/wasm/debug/static.agent.wasm"
+        dir: ..
+        mkdirs: [_build/wasm/debug]
+      - command: wasm-tools component new _build/wasm/debug/static.agent.wasm --output _build/wasm/debug/static.agent.wasm
+        dir: ..
+    componentWasm: ../_build/wasm/debug/static.agent.wasm
+    files:
+      - sourcePath: ./ui/dist/index.html
+        targetPath: /index.html
+        permissions: read-only
+      - sourcePath: ./ui/dist/johnethel-frontend.js
+        targetPath: /johnethel-frontend.js
+        permissions: read-only
+    env:
+
+httpApi:
+  deployments:
+    local:
+      - domain: johnethel-lessons-app.localhost:9006
+        agents:
+          ApiAgent: {}
+      - domain: johnethel-lessons-static.localhost:9006
+        agents:
+          FileServerAgent: {}
