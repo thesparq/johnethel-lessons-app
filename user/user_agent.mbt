@@ -1,164 +1,124 @@
 ///|
-/// UserAgent — durable per-user agent with caching.
-/// Handles HTTP requests directly via mount path /users/{user_id}.
-/// Forks QueryFork for all blocking SurrealDB I/O.
+/// User agent — durable per-user instance
 #derive.agent
-#derive.mount("/users/{user_id}")
-#derive.mount_cors("*")
 struct UserAgent {
   user_id : String
-  // Cache: key → (json_data, timestamp_ms, ttl_ms)
-  cache : Map[String, (String, UInt64, UInt64)]
-  // Token cache: token_prefix → (user_id, role, validated_at, ttl_ms)
-  token_cache : Map[String, (String, String, UInt64, UInt64)]
+  role : String
 }
 
 ///|
-fn UserAgent::new(user_id : String) -> UserAgent {
-  { user_id, cache: {}, token_cache: {} }
+fn UserAgent::new(user_id : String, role : String) -> UserAgent {
+  { user_id, role }
 }
 
-// --- Auth ---
+///|
+fn get_env(name : String) -> String {
+  let envs = @environment.get_environment()
+  for pair in envs {
+    if pair.0 == name {
+      return pair.1
+    }
+  }
+  ""
+}
 
 ///|
-/// Validate token via AuthAgent RPC. Returns (user_id, role).
-/// Uses local token_cache to avoid repeated AuthAgent calls.
-fn validate_token_cached(self : Self, token : String) -> (String, String) raise @common.AgentError {
-  // Check local token cache
-  let prefix = if token.length() > 20 {
-    token[0:20]
+fn str_to_bytes(s : String) -> FixedArray[Byte] {
+  let bytes = FixedArray::make(s.length(), b'\x00')
+  for i = 0; i < s.length(); i = i + 1 {
+    bytes[i] = s[i].to_int().to_byte()
+  }
+  bytes
+}
+
+///|
+fn bytes_to_str(bytes : FixedArray[Byte]) -> String {
+  String::from_array(bytes.map(fn(b) { b.to_int().unsafe_to_char() }))
+}
+
+///|
+fn surreal_url_parts() -> (@httpTypes.Scheme, String, String) {
+  let url = get_env("SURREALDB_URL")
+  let scheme = if url.has_prefix("https://") {
+    @httpTypes.Scheme::Https
   } else {
-    token
+    @httpTypes.Scheme::Http
   }
-  match self.token_cache.get(prefix) {
-    Some((cached_user, cached_role, validated_at, ttl_ms)) => {
-      let now = @wallClock.now()
-      if now - validated_at < ttl_ms {
-        return (cached_user, cached_role)
-      }
-    }
-    None => ()
+  let rest = if url.has_prefix("https://") {
+    url["https://".length():].to_owned()
+  } else if url.has_prefix("http://") {
+    url["http://".length():].to_owned()
+  } else {
+    url
   }
-
-  // Cache miss or stale — validate via AuthAgent
-  let ctor_data = @rpcTypes.DataValue::Tuple([])
-  let client = @rpc.AgentClient::get("AuthAgent", ctor_data)
-  defer client.drop()
-  let result = client.invoke_and_await(
-    "validate_token",
-    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(token)]),
-  )
-  let elements = @extractor.extract_tuple(result)
-  let user_id = @schema.from_element_value_as(elements[0])
-  let role = @schema.from_element_value_as(elements[1])
-  
-  // Cache result for 60 seconds
-  let now = @wallClock.now()
-  self.token_cache[prefix] = (user_id, role, now, 60_000)
-  (user_id, role)
+  let parts = rest.split("/").to_array()
+  let authority = parts[0].to_owned()
+  let base_path = if parts.length() > 1 {
+    let tail = parts[1:].iter().map(fn(sv) { sv.to_owned() }).to_array()
+    "/" + tail.join("/")
+  } else {
+    ""
+  }
+  (scheme, authority, base_path + "/sql")
 }
 
 ///|
-/// Verify that the authenticated user matches this agent's identity.
-fn require_self(self : Self, token : String) -> String raise @common.AgentError {
-  let (user_id, _role) = self.validate_token_cached(token)
-  if user_id != self.user_id {
-    raise @common.AgentError::InvalidInput("Unauthorized: token does not match user")
-  }
-  user_id
-}
+fn surrealdb_query(sql : String) -> Result[Json, String] {
+  let (scheme, authority, path) = surreal_url_parts()
+  let token = get_env("SURREALDB_TOKEN")
+  let ns = get_env("SURREALDB_NS")
+  let db = get_env("SURREALDB_DB")
 
-///|
-/// Verify that the user has the required role.
-fn require_role(self : Self, token : String, allowed : Array[String]) -> String raise @common.AgentError {
-  let (user_id, role) = self.validate_token_cached(token)
-  if user_id != self.user_id {
-    raise @common.AgentError::InvalidInput("Unauthorized: token does not match user")
-  }
-  let mut found = false
-  for r in allowed {
-    if r == role {
-      found = true
-      break
-    }
-  }
-  if not found {
-    raise @common.AgentError::InvalidInput("Forbidden: insufficient permissions")
-  }
-  user_id
-}
+  let headers = @httpTypes.Fields::fields()
+  let _ = headers.append("Authorization", str_to_bytes("Basic cm9vdDpyb290"))
+  let _ = headers.append("surreal-ns", str_to_bytes(ns))
+  let _ = headers.append("surreal-db", str_to_bytes(db))
+  let _ = headers.append("Content-Type", str_to_bytes("text/plain"))
+  let _ = headers.append("Accept", str_to_bytes("application/json"))
 
-// --- Cache ---
+  let request = @httpTypes.OutgoingRequest::outgoing_request(headers)
+  let _ = request.set_method(@httpTypes.Method::Post)
+  let _ = request.set_scheme(Some(scheme))
+  let _ = request.set_authority(Some(authority))
+  let _ = request.set_path_with_query(Some(path))
 
-///|
-fn cache_get(self : Self, key : String) -> String? {
-  match self.cache.get(key) {
-    Some((data, fetched_at, ttl_ms)) => {
-      let now = @wallClock.now()
-      if now - fetched_at < ttl_ms {
-        Some(data)
-      } else {
-        None
-      }
-    }
-    None => None
-  }
-}
+  let body = request.body().unwrap()
+  let output_stream = body.write().unwrap()
+  let body_bytes = str_to_bytes(sql)
+  output_stream.blocking_write_and_flush(body_bytes).unwrap()
+  output_stream.drop()
+  let _ = @httpTypes.OutgoingBody::finish(body, None)
 
-///|
-fn cache_set(self : Self, key : String, data : String, ttl_ms : UInt64) -> Unit {
-  let now = @wallClock.now()
-  self.cache[key] = (data, now, ttl_ms)
-}
-
-///|
-fn cache_invalidate(self : Self, key : String) -> Unit {
-  self.cache.remove(key)
-}
-
-// --- Query forking ---
-
-///|
-/// Fork a QueryFork to execute SQL and return the JSON result string.
-fn fork_query(self : Self, sql : String) -> String raise @common.AgentError {
-  let ctor_data = @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(sql)])
-  let client = @rpc.AgentClient::get("QueryFork", ctor_data)
-  defer client.drop()
-  let result = client.invoke_and_await(
-    "execute",
-    @rpcTypes.DataValue::Tuple([]),
-  )
-  let elements = @extractor.extract_tuple(result)
-  @schema.from_element_value_as(elements[0])
-}
-
-///|
-/// Execute SQL and extract the "result" field from SurrealDB response.
-fn query_result(self : Self, sql : String) -> Json raise @common.AgentError {
-  let response_str = self.fork_query(sql)
-  let response_json = @json.parse(response_str) catch {
-    _ => raise @common.AgentError::InvalidInput("Failed to parse query response")
-  }
-  match response_json {
-    Json::Array(arr) => {
-      if arr.length() == 0 {
-        raise @common.AgentError::InvalidInput("Empty query response")
-      }
-      match arr[0] {
-        Json::Object(obj) => {
-          match obj.get("result") {
-            Some(result) => result
-            None => raise @common.AgentError::InvalidInput("Missing result field")
+  match @http.handle(request, None) {
+    Err(e) => Err("HTTP request failed: " + e.to_string())
+    Ok(future) => {
+      let pollable = future.subscribe()
+      pollable.block()
+      match future.get() {
+        Some(Ok(Ok(response))) => {
+          let status = response.status()
+          let incoming_body = response.consume().unwrap()
+          let stream = incoming_body.stream().unwrap()
+          let bytes = stream.blocking_read(1048576UL).unwrap()
+          stream.drop()
+          let _ = @httpTypes.IncomingBody::finish(incoming_body)
+          let body_str = bytes_to_str(bytes)
+          if status >= 200 && status < 300 {
+            let json = @json.parse(body_str) catch {
+              _ => return Err("Failed to parse JSON response")
+            }
+            Ok(json)
+          } else {
+            Err("HTTP " + status.to_string() + ": " + body_str)
           }
         }
-        _ => raise @common.AgentError::InvalidInput("Unexpected response format")
+        Some(Ok(Err(e))) => Err("HTTP error: " + e.to_string())
+        Some(Err(_)) => Err("Response already consumed")
+        None => Err("Response not ready")
       }
     }
-    _ => raise @common.AgentError::InvalidInput("Expected array response")
   }
 }
-
-// --- Field filtering ---
 
 ///|
 fn filter_lesson_steps(steps : Json) -> Json {
@@ -208,134 +168,128 @@ fn filter_lesson_fields(lesson : Json) -> Json {
   }
 }
 
-// --- Validation ---
-
 ///|
-fn validate_lesson_id(id : String) -> Bool {
-  let parts = id.split(":").to_array()
-  parts.length() == 2 && parts[0] == "lesson_content"
-}
-
-// --- HTTP Endpoints ---
-
-///|
-/// List all subjects — open to everyone.
-#derive.endpoint(get="/subjects")
-#derive.endpoint_header("Authorization", "auth_header")
-pub fn UserAgent::get_subjects(self : Self, auth_header : String) -> String raise @common.AgentError {
-  let _ = self.require_self(auth_header)
-  
-  // Check cache
-  match self.cache_get("subjects") {
-    Some(cached) => return cached
-    None => ()
-  }
-  
-  // Cache miss — fork QueryFork
-  let sql = "SELECT subject FROM lesson_content GROUP BY subject;"
-  let result = self.query_result(sql)
-  let json_str = result.stringify()
-  self.cache_set("subjects", json_str, 600_000)  // 10 min TTL
-  json_str
+/// Spawn a QueryFork to execute SQL and return the raw JSON string.
+fn fork_query(sql : String) -> String raise @common.AgentError {
+  let ctor_data = @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(sql)])
+  let client = @rpc.AgentClient::get("QueryFork", ctor_data)
+  defer client.drop()
+  let result = client.invoke_and_await(
+    "execute",
+    @rpcTypes.DataValue::Tuple([]),
+  )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
 }
 
 ///|
-/// List lessons for a subject — open to everyone.
-#derive.endpoint(get="/subjects/{subject}/lessons")
-#derive.endpoint_header("Authorization", "auth_header")
-pub fn UserAgent::get_lessons(self : Self, subject : String, auth_header : String) -> String raise @common.AgentError {
-  let _ = self.require_self(auth_header)
-  let cache_key = "list:" + subject
-  
-  match self.cache_get(cache_key) {
-    Some(cached) => return cached
-    None => ()
+/// Execute SQL via QueryFork and extract the "result" field.
+fn query_result(sql : String) -> Result[Json, String] {
+  let json_str = fork_query(sql) catch {
+    e => return Err(e.to_string())
   }
-  
-  let sql = "SELECT id, topic_title, week, term, subject FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
-  let result = self.query_result(sql)
-  let json_str = result.stringify()
-  self.cache_set(cache_key, json_str, 600_000)  // 10 min TTL
-  json_str
-}
-
-///|
-/// Get full lesson content — open to everyone.
-#derive.endpoint(get="/lessons/{lesson_id}")
-#derive.endpoint_header("Authorization", "auth_header")
-pub fn UserAgent::get_lesson(self : Self, lesson_id : String, auth_header : String) -> String raise @common.AgentError {
-  let _ = self.require_self(auth_header)
-  
-  if not validate_lesson_id(lesson_id) {
-    raise @common.AgentError::InvalidInput("Invalid lesson ID format")
+  let response = @json.parse(json_str) catch {
+    _ => return Err("Failed to parse query response")
   }
-  
-  let cache_key = "content:" + lesson_id
-  match self.cache_get(cache_key) {
-    Some(cached) => return cached
-    None => ()
-  }
-  
-  let sql = "SELECT * FROM " + lesson_id + ";"
-  let result = self.query_result(sql)
-  let json_str = match result {
+  match response {
     Json::Array(arr) => {
-      if arr.length() > 0 {
-        let filtered = filter_lesson_fields(arr[0])
-        Json::array([filtered]).stringify()
-      } else {
-        "[]"
+      if arr.length() == 0 {
+        return Err("Empty query response")
+      }
+      match arr[0] {
+        Json::Object(obj) => {
+          match obj.get("result") {
+            Some(result) => Ok(result)
+            None => Err("Missing result field")
+          }
+        }
+        _ => Err("Unexpected response format")
       }
     }
-    _ => result.stringify()
+    _ => Err("Expected array response")
   }
-  self.cache_set(cache_key, json_str, 300_000)  // 5 min TTL
-  json_str
+}
+
+///|
+pub fn UserAgent::get_subjects(self : Self) -> String {
+  let _ = self
+  let sql = "SELECT subject FROM lesson_content GROUP BY subject;"
+  match query_result(sql) {
+    Ok(result) => result.stringify()
+    Err(e) => "{\"error\":\"" + e + "\"}"
+  }
+}
+
+///|
+pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
+  let _ = self
+  let sql = "SELECT id, topic_title, week, term, subject FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
+  match query_result(sql) {
+    Ok(result) => result.stringify()
+    Err(e) => "{\"error\":\"" + e + "\"}"
+  }
+}
+
+///|
+pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
+  let _ = self
+  let sql = "SELECT * FROM " + lesson_id + ";"
+  match query_result(sql) {
+    Ok(result) => {
+      match result {
+        Json::Array(arr) => {
+          if arr.length() > 0 {
+            let filtered = filter_lesson_fields(arr[0])
+            Json::array([filtered]).stringify()
+          } else {
+            "[]"
+          }
+        }
+        _ => result.stringify()
+      }
+    }
+    Err(e) => "{\"error\":\"" + e + "\"}"
+  }
 }
 
 ///|
 /// Toggle lesson active state (teacher only).
-#derive.endpoint(post="/lessons/{lesson_id}/toggle")
-#derive.endpoint_header("Authorization", "auth_header")
-pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String, auth_header : String) -> String raise @common.AgentError {
-  let _ = self.require_role(auth_header, ["teacher", "admin"])
-  
-  if not validate_lesson_id(lesson_id) {
-    raise @common.AgentError::InvalidInput("Invalid lesson ID format")
-  }
-  
+/// Updates SurrealDB directly. Returns new active value.
+pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
+  let _ = self
   // Read current state
   let select_sql = "SELECT active FROM " + lesson_id + ";"
-  let result = self.query_result(select_sql)
-  let current = match result {
-    Json::Array(arr) => {
-      if arr.length() > 0 {
-        match arr[0] {
-          Json::Object(obj) => {
-            match obj.get("active") {
-              Some(Json::True) => true
-              Some(Json::False) => false
+  let current = match query_result(select_sql) {
+    Ok(result) => {
+      match result {
+        Json::Array(arr) => {
+          if arr.length() > 0 {
+            match arr[0] {
+              Json::Object(obj) => {
+                match obj.get("active") {
+                  Some(Json::True) => true
+                  Some(Json::False) => false
+                  _ => true
+                }
+              }
               _ => true
             }
+          } else {
+            true
           }
-          _ => true
         }
-      } else {
-        true
+        _ => true
       }
     }
-    _ => true
+    Err(_) => true
   }
-  
   // Update to opposite
-  let next = not(current)
+  let next = !current
   let update_sql = "UPDATE " + lesson_id + " SET active = " + next.to_string() + ";"
-  let _ = self.fork_query(update_sql)
-  
-  // Invalidate cache
-  self.cache_invalidate("content:" + lesson_id)
-  
-  "{\"toggled\":" + next.to_string() + ",\"active\":" + next.to_string() + "}"
+  let _ = fork_query(update_sql) catch {
+    _ => return false
+  }
+  next
 }
 
 ///|

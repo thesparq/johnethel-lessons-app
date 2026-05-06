@@ -1,22 +1,4 @@
 ///|
-/// Toggle fork — ephemeral worker spawned per toggle request.
-/// Dies after handling the request. Offloads work from AdminAgent.
-#derive.agent("ephemeral")
-struct ToggleFork {
-  lesson_id : String
-}
-
-///|
-fn ToggleFork::new(lesson_id : String) -> ToggleFork {
-  { lesson_id }
-}
-
-///|
-pub fn ToggleFork::execute(self : Self) -> Bool raise @common.AgentError {
-  admin_toggle_lesson(self.lesson_id)
-}
-
-///|
 /// API entry point agent — ephemeral, one per request
 #derive.agent("ephemeral")
 #derive.mount("/")
@@ -86,7 +68,7 @@ pub fn ApiAgent::get_lesson(
 
 ///|
 /// Toggle lesson active state (teacher or admin only)
-/// Forks an ephemeral ToggleFork agent to handle the request.
+/// Routes to UserAgent which updates SurrealDB directly.
 #derive.endpoint(post="/lessons/{lesson_id}/toggle")
 #derive.endpoint_header("Authorization", "auth_header")
 pub fn ApiAgent::toggle_lesson(
@@ -95,12 +77,29 @@ pub fn ApiAgent::toggle_lesson(
   auth_header : String
 ) -> String raise @common.AgentError {
   let _ = self
-  let (_user_id, role) = auth_user(auth_header)
+  let (user_id, role) = auth_user(auth_header)
   if role != "teacher" && role != "admin" {
     raise @common.AgentError::InvalidInput("Forbidden: teachers only")
   }
-  let toggled = fork_toggle(lesson_id)
+  let toggled = user_toggle_lesson(user_id, role, lesson_id)
   "{\"toggled\":" + toggled.to_string() + "}"
+}
+
+///|
+/// Call UserAgent::toggle_lesson via RPC.
+fn user_toggle_lesson(user_id : String, role : String, lesson_id : String) -> Bool raise @common.AgentError {
+  let ctor_data = @rpcTypes.DataValue::Tuple([
+    @schema.to_element_value_as(user_id),
+    @schema.to_element_value_as(role),
+  ])
+  let client = @rpc.AgentClient::get("UserAgent", ctor_data)
+  defer client.drop()
+  let result = client.invoke_and_await(
+    "toggle_lesson",
+    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+  )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
 }
 
 ///|
@@ -120,20 +119,6 @@ pub fn ApiAgent::assign_teacher(
   }
   let assigned = admin_assign_teacher(teacher_id, subject)
   "{\"assigned\":" + assigned.to_string() + "}"
-}
-
-///|
-/// Spawn an ephemeral ToggleFork agent to handle a toggle request.
-fn fork_toggle(lesson_id : String) -> Bool raise @common.AgentError {
-  let ctor_data = @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)])
-  let client = @rpc.AgentClient::get("ToggleFork", ctor_data)
-  defer client.drop()
-  let result = client.invoke_and_await(
-    "execute",
-    @rpcTypes.DataValue::Tuple([]),
-  )
-  let elements = @extractor.extract_tuple(result)
-  @schema.from_element_value_as(elements[0])
 }
 
 ///|

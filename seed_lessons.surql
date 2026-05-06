@@ -6,6 +6,7 @@ USE NS johnethel DB lessons;
 -- ============================================
 
 CREATE lesson_content:1 CONTENT {
+  active: true,
   topic_title: "Introduction to Algebra",
   subject: "Mathematics",
   term: "Term 1",
@@ -37,6 +38,7 @@ CREATE lesson_content:1 CONTENT {
 };
 
 CREATE lesson_content:2 CONTENT {
+  active: true,
   topic_title: "Solving Linear Equations",
   subject: "Mathematics",
   term: "Term 1",
@@ -68,6 +70,7 @@ CREATE lesson_content:2 CONTENT {
 };
 
 CREATE lesson_content:4 CONTENT {
+  active: true,
   topic_title: "Quadratic Equations and Factoring",
   subject: "Mathematics",
   term: "Term 1",
@@ -104,6 +107,7 @@ CREATE lesson_content:4 CONTENT {
 -- ============================================
 
 CREATE lesson_content:3 CONTENT {
+  active: true,
   topic_title: "The Water Cycle",
   subject: "Science",
   term: "Term 1",
@@ -136,6 +140,7 @@ CREATE lesson_content:3 CONTENT {
 };
 
 CREATE lesson_content:5 CONTENT {
+  active: true,
   topic_title: "Photosynthesis and Plant Structure",
   subject: "Science",
   term: "Term 1",
@@ -167,6 +172,7 @@ CREATE lesson_content:5 CONTENT {
 };
 
 CREATE lesson_content:6 CONTENT {
+  active: true,
   topic_title: "Forces and Motion",
   subject: "Science",
   term: "Term 1",
@@ -203,6 +209,7 @@ CREATE lesson_content:6 CONTENT {
 -- ============================================
 
 CREATE lesson_content:7 CONTENT {
+  active: true,
   topic_title: "Narrative Writing: Building Compelling Characters",
   subject: "English Language",
   term: "Term 1",
@@ -234,6 +241,7 @@ CREATE lesson_content:7 CONTENT {
 };
 
 CREATE lesson_content:8 CONTENT {
+  active: true,
   topic_title: "Figurative Language: Metaphors, Similes, and Personification",
   subject: "English Language",
   term: "Term 1",
@@ -266,6 +274,7 @@ CREATE lesson_content:8 CONTENT {
 };
 
 CREATE lesson_content:9 CONTENT {
+  active: true,
   topic_title: "Persuasive Writing: Crafting Arguments That Convince",
   subject: "English Language",
   term: "Term 1",
@@ -302,6 +311,7 @@ CREATE lesson_content:9 CONTENT {
 -- ============================================
 
 CREATE lesson_content:10 CONTENT {
+  active: true,
   topic_title: "Introduction to Democracy and Citizenship",
   subject: "Social Studies",
   term: "Term 1",
@@ -334,6 +344,7 @@ CREATE lesson_content:10 CONTENT {
 };
 
 CREATE lesson_content:11 CONTENT {
+  active: true,
   topic_title: "The Industrial Revolution: Causes and Effects",
   subject: "Social Studies",
   term: "Term 1",
@@ -365,6 +376,7 @@ CREATE lesson_content:11 CONTENT {
 };
 
 CREATE lesson_content:12 CONTENT {
+  active: true,
   topic_title: "Human Rights: Universal Declaration and Global Challenges",
   subject: "Social Studies",
   term: "Term 1",
