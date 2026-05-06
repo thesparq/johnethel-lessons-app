@@ -17,25 +17,42 @@ environments:
   cloud:
     server: cloud
     componentPresets: release
+
+retryPolicyDefaults:
+  local:
+    http-transient:
+      priority: 10
+      predicate:
+        propIn: { property: "status-code", values: [502, 503, 504] }
+      policy:
+        countBox:
+          maxRetries: 3
+          inner:
+            exponential:
+              baseDelay: "200ms"
+              factor: 2.0
+
 components:
-  johnethel-lessons-app:api:
-    dir: api
+  johnethel-lessons-app:auth:
+    dir: auth
     templates: moonbit
     buildMergeMode: replace
     build:
-      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk api
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk auth
         dir: ..
-      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents api
+      - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents auth
         dir: ..
       - command: moon build --target wasm
         dir: ..
-      - command: sh -c "wasm-tools component embed .mooncakes/golemcloud/golem_sdk/wit _build/wasm/debug/build/api/api.wasm --encoding utf16 --output _build/wasm/debug/api.agent.wasm"
+      - command: sh -c "wasm-tools component embed .mooncakes/golemcloud/golem_sdk/wit _build/wasm/debug/build/auth/auth.wasm --encoding utf16 --output _build/wasm/debug/auth.agent.wasm"
         dir: ..
         mkdirs: [_build/wasm/debug]
-      - command: wasm-tools component new _build/wasm/debug/api.agent.wasm --output _build/wasm/debug/api.agent.wasm
+      - command: wasm-tools component new _build/wasm/debug/auth.agent.wasm --output _build/wasm/debug/auth.agent.wasm
         dir: ..
-    componentWasm: ../_build/wasm/debug/api.agent.wasm
+    componentWasm: ../_build/wasm/debug/auth.agent.wasm
     env:
+      AUTHENTIK_URL: ""
+      AUTHENTIK_JWKS_URL: ""
 
   johnethel-lessons-app:user:
     dir: user
@@ -110,7 +127,7 @@ httpApi:
     local:
       - domain: johnethel-lessons-app.localhost:9006
         agents:
-          ApiAgent: {}
+          UserAgent: {}
       - domain: johnethel-lessons-static.localhost:9006
         agents:
           FileServerAgent: {}
