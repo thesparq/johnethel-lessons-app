@@ -117,8 +117,7 @@ extern "js" fn js_auth_fetch(
   on_error : (String) -> Unit,
 ) -> Unit =
   #|(url, httpMethod, token, onSuccess, onError) => {
-  #|  const auth = token || "anonymous|student";
-  #|  const config = { method: httpMethod, headers: { "Authorization": "Bearer " + auth } };
+  #|  const config = { method: httpMethod, headers: { "Authorization": "Bearer " + token } };
   #|  fetch(url, config)
   #|    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
   #|    .then(text => onSuccess(text))
@@ -133,13 +132,39 @@ extern "js" fn js_auth_post(
   on_error : (String) -> Unit,
 ) -> Unit =
   #|(url, token, onSuccess, onError) => {
-  #|  const auth = token || "anonymous|student";
-  #|  const config = { method: "POST", headers: { "Authorization": "Bearer " + auth } };
+  #|  const config = { method: "POST", headers: { "Authorization": "Bearer " + token } };
   #|  fetch(url, config)
   #|    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
   #|    .then(text => onSuccess(text))
   #|    .catch(e => onError(e.toString()));
   #| }
+
+#cfg(target="js")
+extern "js" fn js_init_guest_session() -> String =
+  #|() => {
+  #|  const existing = localStorage.getItem("jwt_token") || "";
+  #|  if (existing && !existing.startsWith("guest_")) return existing;
+  #|  const expiry = parseInt(localStorage.getItem("guest_expiry") || "0", 10);
+  #|  if (existing && expiry > Date.now()) return existing;
+  #|  const guestId = "guest_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  #|  const token = guestId + "|student";
+  #|  localStorage.setItem("jwt_token", token);
+  #|  localStorage.setItem("guest_expiry", String(Date.now() + 86400000));
+  #|  return token;
+  #|}
+
+#cfg(target="js")
+extern "js" fn js_guest_time_remaining() -> String =
+  #|() => {
+  #|  const token = localStorage.getItem("jwt_token") || "";
+  #|  if (!token.startsWith("guest_")) return "";
+  #|  const expiry = parseInt(localStorage.getItem("guest_expiry") || "0", 10);
+  #|  if (!expiry) return "";
+  #|  const mins = Math.floor((expiry - Date.now()) / 60000);
+  #|  if (mins <= 0) return "Expired";
+  #|  if (mins < 60) return String(mins) + " min left";
+  #|  return String(Math.floor(mins / 60)) + "h left";
+  #|}
 
 #cfg(target="js")
 extern "js" fn js_local_storage_get(key : String) -> String =
@@ -169,6 +194,10 @@ fn js_local_storage_get(key_ : String) -> String { ignore(key_); "" }
 fn js_local_storage_set(key_ : String, value_ : String) -> Unit { ignore((key_, value_)); () }
 #cfg(not(target="js"))
 fn js_local_storage_remove(key_ : String) -> Unit { ignore(key_); () }
+#cfg(not(target="js"))
+fn js_init_guest_session() -> String { "" }
+#cfg(not(target="js"))
+fn js_guest_time_remaining() -> String { "" }
 
 // --- API commands ---
 
@@ -414,10 +443,12 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       let token = model.token_input
       let role = role_from_token(token)
       js_local_storage_set("jwt_token", token)
+      js_local_storage_remove("guest_expiry")
       (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
     }
     Logout => {
       js_local_storage_remove("jwt_token")
+      js_local_storage_remove("guest_expiry")
       let model = init_model()
       (@nav.push_url("/"), model)
     }
@@ -444,12 +475,18 @@ fn view(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 }
 
 ///|
+fn is_guest(token : String) -> Bool {
+  token.has_prefix("guest_")
+}
+
+///|
 fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   let nav_items : Array[@html.Html] = []
   nav_items.push(
     @html.a(href="/", style=["font-weight: bold", "text-decoration: none", "color: #333"], "Johnethel Lessons"),
   )
-  if model.token != "" {
+  let guest = is_guest(model.token)
+  if not(guest) {
     nav_items.push(
       @html.span(
         style=["margin-left: 12px", "color: #666", "font-size: 12px"],
@@ -467,8 +504,21 @@ fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
       ),
     )
   } else {
-    nav_items.push(@html.span(style=["margin-left: auto", "color: #666", "font-size: 12px"], "Browsing as guest"))
-    nav_items.push(@html.a(href="/login", style=["margin-left: 12px"], "Login"))
+    let time_left = js_guest_time_remaining()
+    nav_items.push(
+      @html.span(
+        style=["margin-left: 12px", "color: #ff8c00", "font-size: 11px", "background: #fff8f0", "padding: 2px 8px", "border-radius: 4px"],
+        "Guest - " + time_left,
+      ),
+    )
+    nav_items.push(@html.a(href="/login", style=["margin-left: 12px", "font-size: 12px"], "Sign in"))
+    nav_items.push(
+      @html.button(
+        on_click=emit(Logout),
+        style=["margin-left: auto", "padding: 4px 12px", "border: 1px solid #ccc", "border-radius: 4px", "cursor: pointer", "font-size: 12px"],
+        "New guest",
+      ),
+    )
   }
   @html.nav(
     style=["display: flex", "align-items: center", "gap: 12px", "padding: 12px 0", "border-bottom: 1px solid #ddd", "margin-bottom: 20px"],
@@ -489,11 +539,12 @@ fn view_content(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 
 ///|
 fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
+  let time_left = js_guest_time_remaining()
   @html.div(
     style=["max-width: 400px", "margin: 80px auto", "text-align: center"],
     [
       @html.h2("Johnethel School"),
-      @html.p("Enter demo credentials to access teacher or admin features."),
+      @html.p("Sign in to unlock full access."),
       @html.div(
         style=["font-size: 12px", "color: #666", "margin-bottom: 12px"],
         "Formats: username|role  (e.g.  teacher|teacher,  admin|admin,  student|student)",
@@ -508,11 +559,11 @@ fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
       @html.button(
         on_click=emit(LoginSubmit),
         style=["padding: 8px 24px", "margin-top: 8px", "border: 1px solid #ccc", "border-radius: 4px", "cursor: pointer"],
-        "Login",
+        "Sign in",
       ),
       @html.div(
-        style=["margin-top: 24px", "font-size: 12px", "color: #888"],
-        "Or continue browsing as a guest.",
+        style=["margin-top: 24px", "font-size: 12px", "color: #ff8c00", "background: #fff8f0", "padding: 8px 16px", "border-radius: 4px"],
+        "Your guest session expires in " + time_left + ". Sign in to keep your progress.",
       ),
       @html.a(
         href="/",
@@ -648,9 +699,9 @@ fn subscriptions(emit : @cmd.Emit[Msg], _model : Model) -> @sub.Sub {
 
 ///|
 fn main {
-  let saved_token = js_local_storage_get("jwt_token")
-  let role = role_from_token(saved_token)
-  let model = { ..init_model(), token: saved_token, role }
+  let token = js_init_guest_session()
+  let role = role_from_token(token)
+  let model = { ..init_model(), token, role }
   let (emit, root) = @rabbita.cell_with_emit(
     model~,
     update~,

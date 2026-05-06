@@ -116,6 +116,30 @@ files:
 **Wrong**: `golem server clean` + manual `rm -rf ~/.local/share/golem/*`
 **Correct**: `golem server run --clean` (stops, cleans, and restarts in one command)
 
+### Outgoing HTTP Hang in Local Server (RESOLVED)
+**Problem**: Agents making outgoing WASI HTTP requests (e.g., `surrealdb_query()`) hang indefinitely at `BEGIN REMOTE WRITE` in the oplog. Both durable and ephemeral agents affected.
+
+**Root Cause**: Golem local dev server entered a corrupted state after extended runtime (~1 day). The worker executor could not complete remote write operations for outgoing HTTP interception.
+
+**Symptoms**:
+- `golem agent invoke` times out after starting `INVOKE`
+- Oplog stops at `BEGIN REMOTE WRITE` entry
+- Direct `curl` to target URL works fine (not a network issue)
+- Simple ephemeral agents (no HTTP) work fine
+
+**Fix**: Stop the server and restart with clean state:
+```bash
+# Kill existing server
+pkill -f "golem server run"
+
+# Restart with clean
+golem server run --clean
+# Or in background:
+nohup golem server run --clean > /tmp/golem-server.log 2>&1 &
+```
+
+**After clean restart**: redeploy all components (`golem deploy -Y`) and recreate any seeded data.
+
 ## Architecture
 
 ### Components (4)

@@ -94,7 +94,7 @@ fn surreal_url_parts() -> (@httpTypes.Scheme, String, String) {
 ///|
 fn surrealdb_query(sql : String) -> Result[Json, String] {
   let (scheme, authority, path) = surreal_url_parts()
-  let token = get_env("SURREALDB_TOKEN")
+  let _token = get_env("SURREALDB_TOKEN")
   let ns = get_env("SURREALDB_NS")
   let db = get_env("SURREALDB_DB")
 
