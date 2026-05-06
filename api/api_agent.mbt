@@ -1,4 +1,22 @@
 ///|
+/// DEPRECATED: ToggleFork kept for provision config compatibility.
+/// Will be removed in next schema evolution.
+#derive.agent("ephemeral")
+struct ToggleFork {
+  lesson_id : String
+}
+
+///|
+fn ToggleFork::new(lesson_id : String) -> ToggleFork {
+  { lesson_id, }
+}
+
+///|
+pub fn ToggleFork::execute(self : Self) -> Bool {
+  false
+}
+
+///|
 /// API entry point agent — ephemeral, one per request
 #derive.agent("ephemeral")
 #derive.mount("/")

@@ -2,6 +2,69 @@
 
 fn init{
   @agents.register_agent({
+    name: "ToggleFork",
+    agent_type: {
+      type_name: "ToggleFork",
+      description: "DEPRECATED: ToggleFork kept for provision config compatibility.  Will be removed in next schema evolution.",
+      source_language: "moonbit",
+      constructor_: {
+        name: Some("new"),
+        description: "Creates a new ToggleFork",
+        prompt_hint: None,
+        input_schema: @rpcTypes.DataSchema::Tuple([
+          (
+            "lesson_id",
+            @schema.schema_of_tag(
+              (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+            ),
+          ),
+        ]),
+      },
+      methods: [
+        {
+          name: "execute",
+          description: "execute",
+          http_endpoint: [],
+          prompt_hint: None,
+          input_schema: @rpcTypes.DataSchema::Tuple([]),
+          output_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "result",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[Bool]),
+              ),
+            ),
+          ]),
+        },
+      ],
+      dependencies: [],
+      mode: @common.AgentMode::EPHEMERAL,
+      http_mount: None,
+      snapshotting: @common.Snapshotting::Disabled,
+      config: [],
+    },
+    construct: fn(input, principal) {
+      try {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 1 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 1 elements, got " + elements.length().to_string(),
+          )
+        }
+        let lesson_id :String = @schema.from_element_value_as(elements[0])
+        let agent = ToggleFork::new(lesson_id)
+        let constructed = @agents.ConstructedAgent::{
+          raw: agent,
+          snapshottable: None,
+          snapshot_format: None,
+        }
+        Ok(constructed)
+      } catch{
+        e => Err(e)
+      }
+    },
+  })
+  @agents.register_agent({
     name: "ApiAgent",
     agent_type: {
       type_name: "ApiAgent",
@@ -265,6 +328,32 @@ fn init{
       }
     },
   })
+}
+
+///|
+impl @agents.RawAgent for ToggleFork with invoke(
+  self,
+  method_name,
+  input,
+  principal,
+) {
+  try {
+    match method_name {
+      "execute" => {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 0 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 0 elements, got " + elements.length().to_string(),
+          )
+        }
+        let result = self.execute()
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
+      }
+      other => Err(@common.AgentError::InvalidMethod(other))
+    }
+  } catch{
+    e => Err(e)
+  }
 }
 
 ///|
