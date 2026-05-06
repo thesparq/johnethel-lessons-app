@@ -8,7 +8,8 @@ Lesson content viewer for Johnethel School. Students browse subjects and lessons
 - **Frontend**: Rabbita (MoonBit → JS, TEA architecture)
 - **Auth**: Authentik OIDC (existing instance)
 - **Database**: SurrealDB (existing, populated, read-only for lessons)
-- **Toggle state**: Lives in UserAgent durable memory only (via `toggle_state` map)
+- **Toggle state**: Lives in SurrealDB (`lesson_content.active`)
+- **Cache**: Per-user TTL cache in UserAgent (5-10 min)
 
 ## Commands
 
@@ -52,9 +53,10 @@ surreal import \
 
 ## Rules
 - Always use Result for error handling — never unwrap, never panic
-- JWT validation happens in api component only — never trust userId from request body
-- Toggle state never touches SurrealDB — UserAgent memory only
+- JWT validation happens in AuthAgent only — never trust userId from request body
+- Toggle state lives in SurrealDB (`lesson_content.active`) — never in agent memory
 - Student responses never include teacher-facing fields
+- Blocking I/O (SurrealDB) must go through ephemeral QueryFork — never block durable agents
 - Never manually edit generated Golem files
 
 ## Docs
