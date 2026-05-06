@@ -16,12 +16,14 @@ fn init{
       methods: [
         {
           name: "download_file",
-          description: "Serve static files",
+          description: "Serve static files. Falls back to index.html for SPA routing.",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Get,
               path_suffix: [
-                @common.PathSegment::PathVariable({ variable_name: "path", }),
+                @common.PathSegment::RemainingPathVariable({
+                  variable_name: "path",
+                }),
               ],
               header_vars: [],
               query_vars: [],

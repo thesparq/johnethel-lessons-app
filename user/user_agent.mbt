@@ -4,12 +4,11 @@
 struct UserAgent {
   user_id : String
   role : String
-  toggle_state : Map[String, Bool]
 }
 
 ///|
 fn UserAgent::new(user_id : String, role : String) -> UserAgent {
-  { user_id, role, toggle_state: {} }
+  { user_id, role }
 }
 
 ///|
@@ -221,8 +220,7 @@ pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
 }
 
 ///|
-pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
-  let _ = self
+pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String raise @common.AgentError {
   let sql = "SELECT * FROM " + lesson_id + ";"
   match surrealdb_query(sql) {
     Ok(json) => {
@@ -232,7 +230,15 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
             Json::Array(arr) => {
               if arr.length() > 0 {
                 let filtered = filter_lesson_fields(arr[0])
-                Json::array([filtered]).stringify()
+                let active = admin_is_lesson_active(lesson_id)
+                let final_json = match filtered {
+                  Json::Object(obj) => {
+                    obj["active"] = Json::boolean(active)
+                    Json::object(obj)
+                  }
+                  _ => filtered
+                }
+                Json::array([final_json]).stringify()
               } else {
                 "[]"
               }
@@ -248,15 +254,17 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
 }
 
 ///|
-pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
-  let current = self.toggle_state.get(lesson_id).unwrap_or(false)
-  self.toggle_state[lesson_id] = !current
-  !current
-}
-
-///|
-pub fn UserAgent::is_lesson_active(self : Self, lesson_id : String) -> Bool {
-  self.toggle_state.get(lesson_id).unwrap_or(false)
+/// Query global toggle state from AdminAgent singleton.
+fn admin_is_lesson_active(lesson_id : String) -> Bool raise @common.AgentError {
+  let ctor_data = @rpcTypes.DataValue::Tuple([])
+  let client = @rpc.AgentClient::get("AdminAgent", ctor_data)
+  defer client.drop()
+  let result = client.invoke_and_await(
+    "is_lesson_active",
+    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+  )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
 }
 
 ///|

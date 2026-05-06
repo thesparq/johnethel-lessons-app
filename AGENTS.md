@@ -8,7 +8,7 @@ Lesson content viewer for Johnethel School. Students browse subjects and lessons
 - **Frontend**: Rabbita (MoonBit → JS, TEA architecture)
 - **Auth**: Authentik OIDC (existing instance)
 - **Database**: SurrealDB (existing, populated, read-only for lessons)
-- **Toggle state**: Lives in TeacherAgent durable memory only
+- **Toggle state**: Lives in UserAgent durable memory only (via `toggle_state` map)
 
 ## Commands
 ```bash
@@ -21,13 +21,89 @@ cd frontend && moon build --target js   # Rabbita frontend
 ## Rules
 - Always use Result for error handling — never unwrap, never panic
 - JWT validation happens in api component only — never trust userId from request body
-- Toggle state never touches SurrealDB — TeacherAgent memory only
+- Toggle state never touches SurrealDB — UserAgent memory only
 - Student responses never include teacher-facing fields
 - Never manually edit generated Golem files
 
 ## Docs
 - docs/architecture.md — agent roles, flows, SurrealDB schema
-- PLAN.md — build order
+- PLAN.md — build order and known issues
+
+## Known Issues & Solutions
+
+### 64KB IFS File Read Limit (Active)
+**Problem**: `@fs.read_bytes()` truncates files to exactly 65,536 bytes per call.
+
+**Root Cause**: Golem 1.5.0's WASI `descriptor.read()` runtime caps each call at 64KB. The SDK's `read_bytes()` helper makes a single call and returns whatever it gets.
+
+**Impact**: Any file >64KB served through IFS (e.g., `johnethel-frontend.js` at 623KB) will be truncated.
+
+**Solution** (in `static/static_agent.mbt`):
+```moonbit
+fn read_file_bytes(path : String) -> Bytes {
+  // WORKAROUND: Required because read_bytes is capped at 64KB per call.
+  // TODO: Replace with @fs.read_bytes(root, path).unwrap() once SDK fix lands.
+  let fd = root.open_at(...)
+  let s = fd.stat().unwrap()
+  let chunk_size : UInt64 = 32768
+  // ... loop until EOF ...
+}
+```
+
+**Related**: https://github.com/golemcloud/golem/pull/3333 ("Skill tweaks and MoonBit SDK fixes")
+
+### IFS File Mounting (RESOLVED)
+**Problem**: Files configured in `golem.yaml` `files:` section returned `NOT_PERMITTED` or `NO_ENTRY`.
+
+**Root Cause**: 
+1. Using `/web/` prefix in targetPath (e.g., `/web/index.html`) — IFS files are mounted at the preopened root `/`
+2. Using `@fs.get_root_dir()` with incorrect path expectations
+3. After `golem server clean` without `--clean` flag, the server data directory was corrupted
+
+**Fix**:
+```yaml
+# golem.yaml — correct IFS configuration
+files:
+  - sourcePath: ./ui/dist/index.html    # relative to golem.yaml
+    targetPath: /index.html              # mounted at root /
+    permissions: read-only
+```
+
+**Lesson**: Always use `./relative/path` for sourcePath and `/filename` for targetPath. Never use subdirectories like `/web/` unless the entire directory is mounted.
+
+### moonbitlang/x/fs Incompatibility (RESOLVED)
+**Problem**: `moonbitlang/x/fs` package from docs failed to build.
+
+**Root Cause**: `moonbitlang/x/fs` requires `__moonbit_fs_unstable` host functions that Golem's WASM runtime does not implement.
+
+**Fix**: Use Golem SDK's `@fs` module (`golemcloud/golem_sdk/filesystem`) instead.
+
+### Server Clean Procedure (LEARNED)
+**Wrong**: `golem server clean` + manual `rm -rf ~/.local/share/golem/*`
+**Correct**: `golem server run --clean` (stops, cleans, and restarts in one command)
+
+## Architecture
+
+### Components (4)
+- **api** — HTTP entry point, JWT validation, routes to backend agents
+- **user** — Durable per-user agent, SurrealDB queries, toggle state
+- **admin** — Durable singleton, teacher assignment
+- **static** — Ephemeral file server, serves frontend assets via IFS
+
+### HTTP Endpoints
+- API: `http://johnethel-lessons-app.localhost:9006`
+  - GET /subjects
+  - GET /subjects/:id/lessons
+  - GET /lessons/:id
+  - POST /lessons/:id/toggle
+  - POST /admin/assign
+- Static: `http://johnethel-lessons-static.localhost:9006`
+  - GET / → index.html
+  - GET /johnethel-frontend.js → JS bundle
+
+## Git Repository
+- https://github.com/thesparq/johnethel-lessons-app
+- PR #1: Static file serving component with 64KB workaround
 
 <!-- golem-managed:guide:moonbit:start -->
 <!-- Golem manages this section. Do not edit manually. -->

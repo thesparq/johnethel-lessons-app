@@ -40,7 +40,6 @@ struct LessonContent {
 enum Msg {
   UrlChanged(@url.Url)
   UrlRequest(@url.UrlRequest)
-  InitRoute
   SubjectsLoaded(String)
   SubjectsFailed(String)
   LessonsLoaded(String)
@@ -60,6 +59,7 @@ struct Model {
   route : Route
   token : String
   token_input : String
+  role : String
   subjects : Array[SubjectInfo]
   lessons : Array[LessonInfo]
   current_lesson : Option[LessonContent]
@@ -73,6 +73,7 @@ fn init_model() -> Model {
     route: Home,
     token: "",
     token_input: "",
+    role: "student",
     subjects: [],
     lessons: [],
     current_lesson: None,
@@ -82,7 +83,18 @@ fn init_model() -> Model {
 }
 
 ///|
+fn role_from_token(token : String) -> String {
+  let parts = token.split("|").to_array()
+  if parts.length() == 2 {
+    parts[1].to_owned()
+  } else {
+    "student"
+  }
+}
+
+///|
 fn route_from_path(path : String) -> Route {
+  let path = if path.has_prefix("/") { path } else { "/" + path }
   let segments = path.split("/").to_array()
   match segments {
     ["", ""] => Home
@@ -105,8 +117,8 @@ extern "js" fn js_auth_fetch(
   on_error : (String) -> Unit,
 ) -> Unit =
   #|(url, httpMethod, token, onSuccess, onError) => {
-  #|  const config = { method: httpMethod, headers: {} };
-  #|  if (token) { config.headers["Authorization"] = "Bearer " + token; }
+  #|  const auth = token || "anonymous|student";
+  #|  const config = { method: httpMethod, headers: { "Authorization": "Bearer " + auth } };
   #|  fetch(url, config)
   #|    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
   #|    .then(text => onSuccess(text))
@@ -121,8 +133,8 @@ extern "js" fn js_auth_post(
   on_error : (String) -> Unit,
 ) -> Unit =
   #|(url, token, onSuccess, onError) => {
-  #|  const config = { method: "POST", headers: {} };
-  #|  if (token) { config.headers["Authorization"] = "Bearer " + token; }
+  #|  const auth = token || "anonymous|student";
+  #|  const config = { method: "POST", headers: { "Authorization": "Bearer " + auth } };
   #|  fetch(url, config)
   #|    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
   #|    .then(text => onSuccess(text))
@@ -141,10 +153,6 @@ extern "js" fn js_local_storage_set(key : String, value : String) -> Unit =
 extern "js" fn js_local_storage_remove(key : String) -> Unit =
   #|(key) => { try { localStorage.removeItem(key); } catch(e) {} }
 
-#cfg(target="js")
-extern "js" fn js_current_path() -> String =
-  #|() => window.location.pathname
-
 #cfg(not(target="js"))
 fn js_auth_fetch(url_ : String, http_method_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
   ignore((url_, http_method_, token_))
@@ -161,8 +169,6 @@ fn js_local_storage_get(key_ : String) -> String { ignore(key_); "" }
 fn js_local_storage_set(key_ : String, value_ : String) -> Unit { ignore((key_, value_)); () }
 #cfg(not(target="js"))
 fn js_local_storage_remove(key_ : String) -> Unit { ignore(key_); () }
-#cfg(not(target="js"))
-fn js_current_path() -> String { "/" }
 
 // --- API commands ---
 
@@ -200,9 +206,27 @@ fn post_cmd(emit : @cmd.Emit[Msg], url : String, token : String) -> @cmd.Cmd {
 
 // --- JSON parsing ---
 
+/// Golem HTTP endpoints return String as a JSON-encoded string.
+/// This helper unwraps one level of JSON string encoding if needed.
+///|
+fn parse_body_json(body : String) -> Result[Json, String] {
+  let first = @json.parse(body) catch {
+    _ => return Err("Invalid JSON")
+  }
+  match first {
+    Json::String(s) => {
+      let inner = @json.parse(s) catch {
+        _ => return Err("Invalid nested JSON")
+      }
+      Ok(inner)
+    }
+    _ => Ok(first)
+  }
+}
+
 ///|
 fn parse_subjects(body : String) -> Array[SubjectInfo] {
-  let json = try? @json.parse(body)
+  let json = parse_body_json(body)
   match json {
     Ok(Json::Array(arr)) =>
       arr.map(fn(item) {
@@ -223,7 +247,7 @@ fn parse_subjects(body : String) -> Array[SubjectInfo] {
 
 ///|
 fn parse_lessons(body : String) -> Array[LessonInfo] {
-  let json = try? @json.parse(body)
+  let json = parse_body_json(body)
   match json {
     Ok(Json::Array(arr)) =>
       arr.map(fn(item) {
@@ -260,7 +284,7 @@ fn parse_lessons(body : String) -> Array[LessonInfo] {
 
 ///|
 fn parse_lesson_content(body : String) -> Option[LessonContent] {
-  let json = try? @json.parse(body)
+  let json = parse_body_json(body)
   match json {
     Ok(Json::Array(arr)) => {
       if arr.length() > 0 {
@@ -329,16 +353,12 @@ fn week_str(week : Double) -> String {
 
 ///|
 fn route_cmd(emit : @cmd.Emit[Msg], token : String, route : Route) -> @cmd.Cmd {
-  if token == "" {
-    @cmd.none
-  } else {
-    match route {
-      Home => fetch_cmd(emit, api_base + "/subjects", "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
-      SubjectDetail(subject) => fetch_cmd(emit, api_base + "/subjects/" + subject + "/lessons", "GET", token, fn(b) { LessonsLoaded(b) }, fn(e) { LessonsFailed(e) })
-      LessonDetail(id) => fetch_cmd(emit, api_base + "/lessons/" + id, "GET", token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
-      Admin => @cmd.none
-      Login => @cmd.none
-    }
+  match route {
+    Home => fetch_cmd(emit, api_base + "/subjects", "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
+    SubjectDetail(subject) => fetch_cmd(emit, api_base + "/subjects/" + subject + "/lessons", "GET", token, fn(b) { LessonsLoaded(b) }, fn(e) { LessonsFailed(e) })
+    LessonDetail(id) => fetch_cmd(emit, api_base + "/lessons/" + id, "GET", token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
+    Admin => @cmd.none
+    Login => @cmd.none
   }
 }
 
@@ -352,15 +372,12 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     }
     UrlRequest(req) => {
       match req {
-        @url.UrlRequest::Internal(url) => (@nav.push_url(url.to_string()), model)
+        @url.UrlRequest::Internal(url) => {
+          let push_path = if url.path.has_prefix("/") { url.path } else { "/" + url.path }
+          (@nav.push_url(push_path), model)
+        }
         @url.UrlRequest::External(href) => (@nav.load(href), model)
       }
-    }
-    InitRoute => {
-      let path = js_current_path()
-      let route = route_from_path(path)
-      let cmd = route_cmd(emit, model.token, route)
-      (cmd, { ..model, route, loading: model.token != "" })
     }
     SubjectsLoaded(body) => {
       let subjects = parse_subjects(body)
@@ -395,16 +412,14 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     TokenInput(text) => (@cmd.none, { ..model, token_input: text })
     LoginSubmit => {
       let token = model.token_input
+      let role = role_from_token(token)
       js_local_storage_set("jwt_token", token)
-      let cmd = @cmd.batch([
-        @nav.push_url("/"),
-        fetch_cmd(emit, api_base + "/subjects", "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) }),
-      ])
-      (cmd, { ..model, token, loading: true, error: "", route: Home })
+      (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
     }
     Logout => {
       js_local_storage_remove("jwt_token")
-      (@nav.push_url("/"), init_model())
+      let model = init_model()
+      (@nav.push_url("/"), model)
     }
   }
 }
@@ -435,7 +450,15 @@ fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     @html.a(href="/", style=["font-weight: bold", "text-decoration: none", "color: #333"], "Johnethel Lessons"),
   )
   if model.token != "" {
-    nav_items.push(@html.a(href="/admin", style=["margin-left: 12px"], "Admin"))
+    nav_items.push(
+      @html.span(
+        style=["margin-left: 12px", "color: #666", "font-size: 12px"],
+        "Role: " + model.role,
+      ),
+    )
+    if model.role == "admin" {
+      nav_items.push(@html.a(href="/admin", style=["margin-left: 12px"], "Admin"))
+    }
     nav_items.push(
       @html.button(
         on_click=emit(Logout),
@@ -444,7 +467,8 @@ fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
       ),
     )
   } else {
-    nav_items.push(@html.a(href="/login", style=["margin-left: auto"], "Login"))
+    nav_items.push(@html.span(style=["margin-left: auto", "color: #666", "font-size: 12px"], "Browsing as guest"))
+    nav_items.push(@html.a(href="/login", style=["margin-left: 12px"], "Login"))
   }
   @html.nav(
     style=["display: flex", "align-items: center", "gap: 12px", "padding: 12px 0", "border-bottom: 1px solid #ddd", "margin-bottom: 20px"],
@@ -454,16 +478,12 @@ fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 
 ///|
 fn view_content(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
-  if model.token == "" {
-    view_login(emit, model)
-  } else {
-    match model.route {
-      Home => view_home(emit, model)
-      SubjectDetail(_) => view_subject(emit, model)
-      LessonDetail(_) => view_lesson(emit, model)
-      Admin => view_admin()
-      Login => view_login(emit, model)
-    }
+  match model.route {
+    Home => view_home(emit, model)
+    SubjectDetail(_) => view_subject(emit, model)
+    LessonDetail(_) => view_lesson(emit, model)
+    Admin => view_admin()
+    Login => view_login(emit, model)
   }
 }
 
@@ -473,9 +493,13 @@ fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     style=["max-width: 400px", "margin: 80px auto", "text-align: center"],
     [
       @html.h2("Johnethel School"),
-      @html.p("Enter your access token to continue."),
+      @html.p("Enter demo credentials to access teacher or admin features."),
+      @html.div(
+        style=["font-size: 12px", "color: #666", "margin-bottom: 12px"],
+        "Formats: username|role  (e.g.  teacher|teacher,  admin|admin,  student|student)",
+      ),
       @html.input(
-        placeholder="Bearer token...",
+        placeholder="username|role",
         value=model.token_input,
         on_input=fn(s) { emit(TokenInput(s)) },
         style=["width: 100%", "padding: 8px", "margin: 8px 0", "box-sizing: border-box"],
@@ -485,6 +509,15 @@ fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
         on_click=emit(LoginSubmit),
         style=["padding: 8px 24px", "margin-top: 8px", "border: 1px solid #ccc", "border-radius: 4px", "cursor: pointer"],
         "Login",
+      ),
+      @html.div(
+        style=["margin-top: 24px", "font-size: 12px", "color: #888"],
+        "Or continue browsing as a guest.",
+      ),
+      @html.a(
+        href="/",
+        style=["display: inline-block", "margin-top: 8px", "padding: 6px 16px", "background: #f8f9fa", "border-radius: 4px", "text-decoration: none", "color: #333"],
+        "Back to subjects",
       ),
     ],
   )
@@ -555,31 +588,37 @@ fn view_lesson(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     Some(lesson) => {
       let bg_color = if lesson.active { "#d4edda" } else { "#fff3cd" }
       let status_text = if lesson.active { "Lesson is active" } else { "This lesson is currently inactive." }
-      let btn_bg = if lesson.active { "#6c757d" } else { "#007bff" }
-      let btn_text = if lesson.active { "Deactivate" } else { "Activate" }
-      @html.div(
-        [
-          @html.a(href="/subjects/" + lesson.subject, style=["color: #666"], "\u2190 Back to " + lesson.subject),
-          @html.h1(lesson.title),
-          @html.div(
-            style=["margin-bottom: 16px", "color: #666"],
-            "Week " + week_str(lesson.week) + " \u00b7 " + lesson.term,
-          ),
-          @html.div(
-            style=["background: " + bg_color, "padding: 8px 12px", "border-radius: 4px", "margin-bottom: 12px"],
-            status_text,
-          ),
+      let is_teacher = model.role == "teacher" || model.role == "admin"
+      let children : Array[@html.Html] = [
+        @html.a(href="/subjects/" + lesson.subject, style=["color: #666"], "\u2190 Back to " + lesson.subject),
+        @html.h1(lesson.title),
+        @html.div(
+          style=["margin-bottom: 16px", "color: #666"],
+          "Week " + week_str(lesson.week) + " \u00b7 " + lesson.term,
+        ),
+        @html.div(
+          style=["background: " + bg_color, "padding: 8px 12px", "border-radius: 4px", "margin-bottom: 12px"],
+          status_text,
+        ),
+      ]
+      if is_teacher {
+        let btn_bg = if lesson.active { "#6c757d" } else { "#007bff" }
+        let btn_text = if lesson.active { "Deactivate" } else { "Activate" }
+        children.push(
           @html.button(
             on_click=emit(ToggleLesson(lesson.id)),
             style=["padding: 6px 16px", "margin-bottom: 16px", "background: " + btn_bg, "color: white", "border: none", "border-radius: 4px", "cursor: pointer"],
             btn_text,
           ),
-          @html.div(
-            style=["white-space: pre-wrap", "line-height: 1.6"],
-            lesson.content,
-          ),
-        ],
+        )
+      }
+      children.push(
+        @html.div(
+          style=["white-space: pre-wrap", "line-height: 1.6"],
+          lesson.content,
+        ),
       )
+      @html.div(children)
     }
     None => @html.div("Lesson not found.")
   }
@@ -610,7 +649,8 @@ fn subscriptions(emit : @cmd.Emit[Msg], _model : Model) -> @sub.Sub {
 ///|
 fn main {
   let saved_token = js_local_storage_get("jwt_token")
-  let model = { ..init_model(), token: saved_token }
+  let role = role_from_token(saved_token)
+  let model = { ..init_model(), token: saved_token, role }
   let (emit, root) = @rabbita.cell_with_emit(
     model~,
     update~,
@@ -618,14 +658,5 @@ fn main {
     subscriptions~,
   )
   let app = @rabbita.new(root)
-  let init_cmd = @cmd.batch([
-    emit(InitRoute),
-    if saved_token != "" {
-      fetch_cmd(emit, api_base + "/subjects", "GET", saved_token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
-    } else {
-      @cmd.none
-    },
-  ])
-  app.with_init(init_cmd)
   app.mount("app")
 }
