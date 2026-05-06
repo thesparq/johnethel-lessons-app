@@ -284,3 +284,119 @@ pub fn AdminAgentClient::schedule_cancelable_get_teacher_for_subject(
     )
 }
 
+///|
+pub fn AdminAgentClient::toggle_lesson(
+  self : AdminAgentClient,
+  lesson_id : String,
+) -> Bool raise @common.AgentError {
+  let result = self
+    .client
+    .invoke_and_await(
+      "toggle_lesson",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn AdminAgentClient::trigger_toggle_lesson(
+  self : AdminAgentClient,
+  lesson_id : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .invoke(
+      "toggle_lesson",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+}
+
+///|
+pub fn AdminAgentClient::schedule_toggle_lesson(
+  self : AdminAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  lesson_id : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "toggle_lesson",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+}
+
+///|
+pub fn AdminAgentClient::schedule_cancelable_toggle_lesson(
+  self : AdminAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  lesson_id : String,
+) -> @agentHost.CancellationToken raise @common.AgentError {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "toggle_lesson",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+}
+
+///|
+pub fn AdminAgentClient::is_lesson_active(
+  self : AdminAgentClient,
+  lesson_id : String,
+) -> Bool raise @common.AgentError {
+  let result = self
+    .client
+    .invoke_and_await(
+      "is_lesson_active",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn AdminAgentClient::trigger_is_lesson_active(
+  self : AdminAgentClient,
+  lesson_id : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .invoke(
+      "is_lesson_active",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+}
+
+///|
+pub fn AdminAgentClient::schedule_is_lesson_active(
+  self : AdminAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  lesson_id : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "is_lesson_active",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+}
+
+///|
+pub fn AdminAgentClient::schedule_cancelable_is_lesson_active(
+  self : AdminAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  lesson_id : String,
+) -> @agentHost.CancellationToken raise @common.AgentError {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "is_lesson_active",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
+    )
+}
+

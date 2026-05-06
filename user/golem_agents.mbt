@@ -86,50 +86,6 @@ fn init{
             ),
           ]),
         },
-        {
-          name: "toggle_lesson",
-          description: "toggle_lesson",
-          http_endpoint: [],
-          prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "lesson_id",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-          ]),
-          output_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "result",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[Bool]),
-              ),
-            ),
-          ]),
-        },
-        {
-          name: "is_lesson_active",
-          description: "is_lesson_active",
-          http_endpoint: [],
-          prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "lesson_id",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-          ]),
-          output_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "result",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[Bool]),
-              ),
-            ),
-          ]),
-        },
       ],
       dependencies: [],
       mode: @common.AgentMode::DURABLE,
@@ -200,28 +156,6 @@ impl @agents.RawAgent for UserAgent with invoke(
         }
         let lesson_id :String = @schema.from_element_value_as(elements[0])
         let result = self.get_lesson(lesson_id)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      "toggle_lesson" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 1 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 1 elements, got " + elements.length().to_string(),
-          )
-        }
-        let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let result = self.toggle_lesson(lesson_id)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      "is_lesson_active" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 1 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 1 elements, got " + elements.length().to_string(),
-          )
-        }
-        let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let result = self.is_lesson_active(lesson_id)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       other => Err(@common.AgentError::InvalidMethod(other))

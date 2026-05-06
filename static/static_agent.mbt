@@ -11,17 +11,26 @@ fn FileServerAgent::new() -> FileServerAgent {
 
 ///|
 /// Read full file contents via chunked reads.
+/// Returns empty bytes if file does not exist (caller checks length for fallback).
 /// WORKAROUND: Required because `read_bytes` is capped at 64KB per call.
-/// TODO: Replace with `@fs.read_bytes(root, path).unwrap()` once Golem SDK fixes the limit.
 fn read_file_bytes(path : String) -> Bytes {
-  let root = @fs.get_root_dir().unwrap()
-  let fd = root.open_at(
+  let root = match @fs.get_root_dir() {
+    Some(r) => r
+    None => return b""
+  }
+  let fd = match root.open_at(
     @fsTypes.PathFlags::default(),
     path,
     @fsTypes.OpenFlags::default(),
     @fsTypes.DescriptorFlags::default().set(@fsTypes.DescriptorFlagsFlag::READ),
-  ).unwrap()
-  let s = fd.stat().unwrap()
+  ) {
+    Ok(f) => f
+    Err(_) => return b""
+  }
+  let s = match fd.stat() {
+    Ok(st) => st
+    Err(_) => return b""
+  }
   let chunk_size : UInt64 = 32768
   let mut offset : UInt64 = 0
   let acc : Array[Byte] = []
@@ -62,8 +71,8 @@ fn mime_type(path : String) -> String {
 }
 
 ///|
-/// Serve static files
-#derive.endpoint(get="/{path}")
+/// Serve static files. Falls back to index.html for SPA routing.
+#derive.endpoint(get="/{*path}")
 pub fn FileServerAgent::download_file(
   self : Self,
   path : String,
@@ -71,7 +80,13 @@ pub fn FileServerAgent::download_file(
   ignore(self)
   let full_path = if path == "" { "index.html" } else { path }
   let bytes = read_file_bytes(full_path)
-  @types.UnstructuredBinary::from_inline(bytes, mime_type=mime_type(full_path))
+  // SPA fallback: if file not found and path looks like a route, serve index.html
+  let (final_path, final_bytes) = if bytes.length() == 0 && full_path != "index.html" {
+    ("index.html", read_file_bytes("index.html"))
+  } else {
+    (full_path, bytes)
+  }
+  @types.UnstructuredBinary::from_inline(final_bytes, mime_type=mime_type(final_path))
 }
 
 ///|

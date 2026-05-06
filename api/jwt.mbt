@@ -1,7 +1,36 @@
-///| jwt.mbt — JWT payload parser (no signature verification)
+///| jwt.mbt — auth parser supporting JWT and simple user|role tokens
+
+/// Parse auth token and extract (user_id, role).
+/// Supports three formats:
+///   1. Empty / missing → ("guest", "student")
+///   2. JWT (contains '.') → parse claims
+///   3. Simple "user|role" → split on '|' (e.g. "teacher1|teacher")
+/// NOTE: JWT signature is NOT verified — add JWKS validation for production.
+/// Parse auth token and extract (user_id, role).
+fn parse_auth(token : String) -> (String, String) {
+  if token == "" {
+    return ("guest", "student")
+  }
+  // Simple user|role format
+  let parts = token.split("|").to_array()
+  if parts.length() == 2 {
+    let user_id = parts[0].to_owned()
+    let role = parts[1].to_owned()
+    return (user_id, role)
+  }
+  // JWT format
+  let jwt_parts = token.split(".").to_array()
+  if jwt_parts.length() == 3 {
+    match parse_jwt(token) {
+      Ok(pair) => return pair
+      Err(_) => ()
+    }
+  }
+  // Fallback: treat entire token as user_id, default role student
+  (token, "student")
+}
 
 /// Parse JWT payload and extract (sub, role) claims.
-/// NOTE: signature is NOT verified — add JWKS validation for production.
 fn parse_jwt(token : String) -> Result[(String, String), String] {
   let parts = token.split(".").to_array()
   if parts.length() != 3 {
