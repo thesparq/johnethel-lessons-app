@@ -11,11 +11,43 @@ Lesson content viewer for Johnethel School. Students browse subjects and lessons
 - **Toggle state**: Lives in UserAgent durable memory only (via `toggle_state` map)
 
 ## Commands
+
+### Build & Deploy
 ```bash
-moon build
-moon check --target wasm
-golem app deploy
-cd frontend && moon build --target js   # Rabbita frontend
+moon build                           # Build all WASM components
+moon check --target wasm             # Type-check WASM target
+golem deploy                         # Deploy to Golem
+cd frontend && moon build --target js   # Build Rabbita frontend
+```
+
+### Database Seeding
+```bash
+./scripts/seed-db.sh                 # Seed SurrealDB with sample lessons
+```
+
+The seeder will:
+1. Check if SurrealDB is running (starts it if not)
+2. Create namespace `johnethel` and database `lessons`
+3. Clear existing `lesson_content` data
+4. Import all 12 sample lessons from `seed_lessons.surql`
+
+**Environment variables:**
+- `SURREAL_BIN` — path to surreal binary (default: `~/.surrealdb/surreal`)
+- `SURREAL_URL` — SurrealDB endpoint (default: `http://127.0.0.1:8000`)
+- `SURREAL_USER` / `SURREAL_PASS` — auth credentials (default: `root` / `root`)
+- `SURREAL_NS` / `SURREAL_DB` — namespace and database (default: `johnethel` / `lessons`)
+
+**Manual seeding (if script fails):**
+```bash
+# Start SurrealDB
+surreal start --user root --pass root --bind 127.0.0.1:8000
+
+# In another terminal
+surreal import \
+  --endpoint http://127.0.0.1:8000 \
+  --username root --password root \
+  --namespace johnethel --database lessons \
+  ./seed_lessons.surql
 ```
 
 ## Rules
