@@ -17,20 +17,6 @@ environments:
   cloud:
     server: cloud
     componentPresets: release
-retryPolicyDefaults:
-  local:
-    http-transient:
-      priority: 10
-      predicate:
-        propIn: { property: "status-code", values: [502, 503, 504] }
-      policy:
-        countBox:
-          maxRetries: 3
-          inner:
-            exponential:
-              baseDelay: "200ms"
-              factor: 2.0
-
 components:
   johnethel-lessons-app:auth:
     dir: auth
