@@ -1,14 +1,43 @@
 ///|
-/// User agent — durable per-user instance
+/// User agent — durable per-user instance with caching.
 #derive.agent
 struct UserAgent {
   user_id : String
   role : String
+  // Cache: key → (json_data, expiry_seconds)
+  cache : Map[String, (String, UInt64)]
 }
 
 ///|
 fn UserAgent::new(user_id : String, role : String) -> UserAgent {
-  { user_id, role }
+  { user_id, role, cache: {} }
+}
+
+///|
+fn UserAgent::cache_get(self : Self, key : String) -> String? {
+  match self.cache.get(key) {
+    Some((data, expiry)) => {
+      let now = @wallClock.now().seconds
+      if now < expiry {
+        Some(data)
+      } else {
+        self.cache.remove(key)
+        None
+      }
+    }
+    None => None
+  }
+}
+
+///|
+fn UserAgent::cache_set(self : Self, key : String, data : String, ttl_secs : UInt64) -> Unit {
+  let expiry = @wallClock.now().seconds + ttl_secs
+  self.cache[key] = (data, expiry)
+}
+
+///|
+fn UserAgent::cache_invalidate(self : Self, key : String) -> Unit {
+  self.cache.remove(key)
 }
 
 ///|
@@ -212,29 +241,45 @@ fn query_result(sql : String) -> Result[Json, String] {
 
 ///|
 pub fn UserAgent::get_subjects(self : Self) -> String {
-  let _ = self
+  let cache_key = "subjects"
+  match self.cache_get(cache_key) {
+    Some(cached) => return cached
+    None => ()
+  }
   let sql = "SELECT subject FROM lesson_content GROUP BY subject;"
-  match query_result(sql) {
+  let json_str = match query_result(sql) {
     Ok(result) => result.stringify()
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
+  self.cache_set(cache_key, json_str, 600) // 10 min TTL
+  json_str
 }
 
 ///|
 pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
-  let _ = self
+  let cache_key = "list:" + subject
+  match self.cache_get(cache_key) {
+    Some(cached) => return cached
+    None => ()
+  }
   let sql = "SELECT id, topic_title, week, term, subject FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
-  match query_result(sql) {
+  let json_str = match query_result(sql) {
     Ok(result) => result.stringify()
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
+  self.cache_set(cache_key, json_str, 600) // 10 min TTL
+  json_str
 }
 
 ///|
 pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
-  let _ = self
+  let cache_key = "content:" + lesson_id
+  match self.cache_get(cache_key) {
+    Some(cached) => return cached
+    None => ()
+  }
   let sql = "SELECT * FROM " + lesson_id + ";"
-  match query_result(sql) {
+  let json_str = match query_result(sql) {
     Ok(result) => {
       match result {
         Json::Array(arr) => {
@@ -250,13 +295,14 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
     }
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
+  self.cache_set(cache_key, json_str, 300) // 5 min TTL
+  json_str
 }
 
 ///|
 /// Toggle lesson active state (teacher only).
 /// Updates SurrealDB directly. Returns new active value.
 pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
-  let _ = self
   // Read current state
   let select_sql = "SELECT active FROM " + lesson_id + ";"
   let current = match query_result(select_sql) {
@@ -289,6 +335,8 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   let _ = fork_query(update_sql) catch {
     _ => return false
   }
+  // Invalidate cache
+  self.cache_invalidate("content:" + lesson_id)
   next
 }
 

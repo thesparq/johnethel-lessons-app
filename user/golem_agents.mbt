@@ -5,7 +5,7 @@ fn init{
     name: "UserAgent",
     agent_type: {
       type_name: "UserAgent",
-      description: "User agent — durable per-user instance",
+      description: "User agent — durable per-user instance with caching.",
       source_language: "moonbit",
       constructor_: {
         name: Some("new"),
