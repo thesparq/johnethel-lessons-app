@@ -10,20 +10,44 @@ fn FileServerAgent::new() -> FileServerAgent {
 }
 
 ///|
-/// Read full file contents. Returns empty bytes if file does not exist.
+/// Read full file contents via chunked reads (64KB WASI read limit).
+/// Returns empty bytes if file does not exist.
 fn read_file_bytes(path : String) -> Bytes {
   let root = match @fs.get_root_dir() {
     Some(r) => r
     None => return b""
   }
-  match @fs.read_bytes(root, path) {
-    Ok(bytes) => {
-      let arr : Array[Byte] = []
-      for b in bytes { arr.push(b) }
-      Bytes::from_array(arr)
-    }
-    Err(_) => b""
+  let fd = match root.open_at(
+    @fsTypes.PathFlags::default(),
+    path,
+    @fsTypes.OpenFlags::default(),
+    @fsTypes.DescriptorFlags::default().set(@fsTypes.DescriptorFlagsFlag::READ),
+  ) {
+    Ok(f) => f
+    Err(_) => return b""
   }
+  let s = match fd.stat() {
+    Ok(st) => st
+    Err(_) => return b""
+  }
+  let chunk_size : UInt64 = 32768
+  let mut offset : UInt64 = 0
+  let acc : Array[Byte] = []
+  while offset < s.size {
+    let remaining = s.size - offset
+    let to_read = if remaining < chunk_size { remaining } else { chunk_size }
+    match fd.read(to_read, offset) {
+      Err(_) => break
+      Ok((chunk, eof)) => {
+        for b in chunk {
+          acc.push(b)
+        }
+        offset += chunk.length().to_int64().reinterpret_as_uint64()
+        if eof { break }
+      }
+    }
+  }
+  Bytes::from_array(acc)
 }
 
 ///|
