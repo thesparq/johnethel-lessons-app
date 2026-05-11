@@ -105,7 +105,12 @@ fn surrealdb_query(sql : String) -> Result[Json, String] {
   let db = get_env("SURREALDB_DB")
 
   let headers = @httpTypes.Fields::fields()
-  let auth_value = "Basic " + base64_encode("root:" + _token)
+  let db_user = get_env("SURREALDB_USER")
+  let auth_value = if db_user != "" {
+    "Basic " + base64_encode(db_user + ":" + _token)
+  } else {
+    "Bearer " + _token
+  }
   let _ = headers.append("Authorization", str_to_bytes(auth_value))
   let _ = headers.append("surreal-ns", str_to_bytes(ns))
   let _ = headers.append("surreal-db", str_to_bytes(db))

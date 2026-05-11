@@ -101,6 +101,7 @@ components:
       SURREALDB_URL: "{{ SURREALDB_URL }}"
       SURREALDB_NS: "{{ SURREALDB_NS }}"
       SURREALDB_DB: "{{ SURREALDB_DB }}"
+      SURREALDB_USER: "{{ SURREALDB_USER }}"
       SURREALDB_TOKEN: "{{ SURREALDB_TOKEN }}"
 
   johnethel-lessons-app:admin:

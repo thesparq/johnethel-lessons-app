@@ -15,6 +15,10 @@ Replace all hardcoded values in `golem.yaml` env vars with `{{ VAR_NAME }}` temp
 | user | SURREALDB_NS | `"johnethel"` | `"{{ SURREALDB_NS }}"` |
 | user | SURREALDB_DB | `"lessons"` | `"{{ SURREALDB_DB }}"` |
 | user | SURREALDB_TOKEN | `"root"` | `"{{ SURREALDB_TOKEN }}"` |
+| user | SURREALDB_USER | *(new)* | `"{{ SURREALDB_USER }}"` |
+
+When `SURREALDB_USER` is set: uses `Basic base64(user:token)` auth.
+When empty: uses `Bearer <token>` auth (for scope tokens).
 | static | AUTHENTIK_URL | `"https://auth.johnethel.school"` | `"{{ AUTHENTIK_URL }}"` |
 | static | AUTHENTIK_CLIENT_ID | `"rhca5hup..."` | `"{{ AUTHENTIK_CLIENT_ID }}"` |
 | static | API_URL | `"http://johnethel-lessons-app.localhost:9006"` | `"{{ API_URL }}"` |
