@@ -552,7 +552,11 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       match route {
         Callback(_) => {
           let code = js_get_query_param("code")
-          if code != "" {
+          let returned_state = js_get_query_param("state")
+          let stored_state = js_session_get("oauth_state")
+          if stored_state != "" && returned_state != stored_state {
+            (@cmd.none, { ..model, route: Login, loading: false, error: "CSRF check failed: state mismatch" })
+          } else if code != "" {
             let cmd = exchange_cmd(emit, code)
             (cmd, { ..model, route, loading: true, error: "" })
           } else {
@@ -632,6 +636,7 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
           }
           js_session_set("pkce_verifier", verifier)
           let state = "csrf_" + verifier[0:10].to_owned()
+          js_session_set("oauth_state", state)
           let url = auth_url_str + "/application/o/authorize/?client_id=" + client_id_str + "&redirect_uri=" + redirect_uri + "&response_type=code&scope=openid+profile+email&code_challenge=" + challenge + "&code_challenge_method=S256&state=" + state
           js_redirect(url)
           (@cmd.none, { ..model, loading: false, error: "" })
@@ -643,10 +648,15 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       let token = body
       let role = role_from_jwt(token)
       js_local_storage_set("jwt_token", token)
+      js_session_set("pkce_verifier", "")
+      js_session_set("oauth_state", "")
       (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
     }
-    LoginFailed(err) =>
+    LoginFailed(err) => {
+      js_session_set("pkce_verifier", "")
+      js_session_set("oauth_state", "")
       (@cmd.none, { ..model, loading: false, error: "Login failed: " + err })
+    }
   }
 }
 
