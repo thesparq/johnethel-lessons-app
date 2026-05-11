@@ -57,7 +57,7 @@ components:
         dir: ..
     componentWasm: ../_build/wasm/debug/auth.agent.wasm
     env:
-      AUTHENTIK_USERINFO_URL: "https://auth.johnethel.school/application/o/userinfo/"
+      AUTHENTIK_USERINFO_URL: "{{ AUTHENTIK_USERINFO_URL }}"
 
   johnethel-lessons-app:api:
     dir: api
@@ -77,8 +77,8 @@ components:
         dir: ..
     componentWasm: ../_build/wasm/debug/api.agent.wasm
     env:
-      AUTHENTIK_URL: "https://auth.johnethel.school"
-      AUTHENTIK_CLIENT_ID: "rhca5hupVGwRWh2EVf7dkw3WXXFcseJMcsdQYVH9"
+      AUTHENTIK_URL: "{{ AUTHENTIK_URL }}"
+      AUTHENTIK_CLIENT_ID: "{{ AUTHENTIK_CLIENT_ID }}"
 
   johnethel-lessons-app:user:
     dir: user
@@ -98,10 +98,10 @@ components:
         dir: ..
     componentWasm: ../_build/wasm/debug/user.agent.wasm
     env:
-      SURREALDB_URL: "http://localhost:8000"
-      SURREALDB_NS: "johnethel"
-      SURREALDB_DB: "lessons"
-      SURREALDB_TOKEN: "root"
+      SURREALDB_URL: "{{ SURREALDB_URL }}"
+      SURREALDB_NS: "{{ SURREALDB_NS }}"
+      SURREALDB_DB: "{{ SURREALDB_DB }}"
+      SURREALDB_TOKEN: "{{ SURREALDB_TOKEN }}"
 
   johnethel-lessons-app:admin:
     dir: admin
@@ -151,9 +151,9 @@ components:
         targetPath: /johnethel-frontend.js
         permissions: read-only
     env:
-      AUTHENTIK_URL: "https://auth.johnethel.school"
-      AUTHENTIK_CLIENT_ID: "rhca5hupVGwRWh2EVf7dkw3WXXFcseJMcsdQYVH9"
-      API_URL: "http://johnethel-lessons-app.localhost:9006"
+      AUTHENTIK_URL: "{{ AUTHENTIK_URL }}"
+      AUTHENTIK_CLIENT_ID: "{{ AUTHENTIK_CLIENT_ID }}"
+      API_URL: "{{ API_URL }}"
 
 httpApi:
   deployments:
