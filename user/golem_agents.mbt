@@ -151,7 +151,7 @@ fn init{
         },
         {
           name: "toggle_lesson",
-          description: "Toggle lesson active state (teacher only).  Updates SurrealDB directly. Returns new active value.",
+          description: "Toggle lesson active state (teacher or admin only).  Updates SurrealDB directly. Returns new active value.",
           http_endpoint: [],
           prompt_hint: None,
           input_schema: @rpcTypes.DataSchema::Tuple([

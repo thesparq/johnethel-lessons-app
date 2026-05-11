@@ -17,6 +17,13 @@ environments:
   cloud:
     server: cloud
     componentPresets: release
+  vps:
+    server:
+      url: https://golem.johnethel.school
+      auth:
+        staticToken: ""
+      allowInsecure: false
+    componentPresets: release
 
 retryPolicyDefaults:
   local:
@@ -146,6 +153,7 @@ components:
     env:
       AUTHENTIK_URL: "https://auth.johnethel.school"
       AUTHENTIK_CLIENT_ID: "rhca5hupVGwRWh2EVf7dkw3WXXFcseJMcsdQYVH9"
+      API_URL: "http://johnethel-lessons-app.localhost:9006"
 
 httpApi:
   deployments:

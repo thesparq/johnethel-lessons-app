@@ -12,6 +12,7 @@ import {
   "golemcloud/golem_sdk/filesystem" @fs,
   "golemcloud/golem_sdk/interface/wasi/filesystem/types" @fsTypes,
   "golemcloud/golem_sdk/interface/wasi/cli/environment" @environment,
+  "moonbitlang/core/json" @json,
 }
 
 options(

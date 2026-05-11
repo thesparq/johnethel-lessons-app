@@ -15,6 +15,7 @@ import {
   "golemcloud/golem_sdk/interface/wasi/cli/environment" @environment,
   "golemcloud/golem_sdk/interface/wasi/http/types" @httpTypes,
   "moonbitlang/core/json" @json,
+  "moonbitlang/core/encoding/base64" @base64,
 }
 
 options(

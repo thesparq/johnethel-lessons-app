@@ -1,29 +1,33 @@
 ///|
-let api_base : String = "http://johnethel-lessons-app.localhost:9006"
-
-///|
 let redirect_uri : String = "http://johnethel-lessons-static.localhost:9006/callback"
 
 // Authentik config — populated by config.js before this script runs
 #cfg(target="js")
 extern "js" fn js_get_config_json() -> String =
-  #|() => { try { const c = window.__CONFIG__ || {}; return JSON.stringify({u: c.authentikUrl || "", c: c.clientId || ""}); } catch(e) { return "{}"; } }
+  #|() => { try { const c = window.__CONFIG__ || {}; return JSON.stringify({u: c.authentikUrl || "", c: c.clientId || "", a: c.apiUrl || ""}); } catch(e) { return "{}"; } }
 
 #cfg(not(target="js"))
 fn js_get_config_json() -> String { "{}" }
 
 ///|
-fn parse_config() -> (String, String) {
+fn parse_config() -> (String, String, String) {
   let raw = js_get_config_json()
-  let json = @json.parse(raw) catch { _ => return ("", "") }
+  let json = @json.parse(raw) catch { _ => return ("", "", "") }
   match json {
     Json::Object(obj) => {
       let url = match obj.get("u") { Some(Json::String(s)) => s; _ => "" }
       let client_id = match obj.get("c") { Some(Json::String(s)) => s; _ => "" }
-      (url, client_id)
+      let api_base = match obj.get("a") { Some(Json::String(s)) => s; _ => "http://johnethel-lessons-app.localhost:9006" }
+      (url, client_id, api_base)
     }
-    _ => ("", "")
+    _ => ("", "", "")
   }
+}
+
+///|
+fn api_base() -> String {
+  let (_, _, base) = parse_config()
+  base
 }
 
 #cfg(target="js")
@@ -95,6 +99,7 @@ enum Msg {
   PkceReady(String)
   AuthCallback(String)
   LoginFailed(String)
+  AuthExpired
 }
 
 ///|
@@ -178,12 +183,13 @@ extern "js" fn js_auth_fetch(
   token : String,
   on_success : (String) -> Unit,
   on_error : (String) -> Unit,
+  on_auth_error : (String) -> Unit,
 ) -> Unit =
-  #|(url, httpMethod, token, onSuccess, onError) => {
+  #|(url, httpMethod, token, onSuccess, onError, onAuthError) => {
   #|  const config = { method: httpMethod, headers: { "Authorization": "Bearer " + token } };
   #|  fetch(url, config)
-  #|    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
-  #|    .then(text => onSuccess(text))
+  #|    .then(r => { if (r.status === 401 || r.status === 403) { onAuthError("auth_expired"); return null; } if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+  #|    .then(text => { if (text !== null) onSuccess(text); })
   #|    .catch(e => onError(e.toString()));
   #| }
 
@@ -193,12 +199,13 @@ extern "js" fn js_auth_post(
   token : String,
   on_success : (String) -> Unit,
   on_error : (String) -> Unit,
+  on_auth_error : (String) -> Unit,
 ) -> Unit =
-  #|(url, token, onSuccess, onError) => {
+  #|(url, token, onSuccess, onError, onAuthError) => {
   #|  const config = { method: "POST", headers: { "Authorization": "Bearer " + token } };
   #|  fetch(url, config)
-  #|    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
-  #|    .then(text => onSuccess(text))
+  #|    .then(r => { if (r.status === 401 || r.status === 403) { onAuthError("auth_expired"); return null; } if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+  #|    .then(text => { if (text !== null) onSuccess(text); })
   #|    .catch(e => onError(e.toString()));
   #| }
 
@@ -221,6 +228,13 @@ extern "js" fn js_current_url() -> String =
 #cfg(target="js")
 extern "js" fn js_get_query_param(name : String) -> String =
   #|(name) => { try { const p = new URLSearchParams(window.location.search); return p.get(name) || ""; } catch(e) { return ""; } }
+
+#cfg(target="js")
+extern "js" fn js_url_encode(s : String) -> String =
+  #|(s) => { try { return encodeURIComponent(s); } catch(e) { return s; } }
+
+#cfg(not(target="js"))
+fn js_url_encode(s : String) -> String { s }
 
 #cfg(target="js")
 extern "js" fn js_redirect(url : String) -> Unit =
@@ -274,20 +288,12 @@ extern "js" fn js_form_post(
   #| }
 
 #cfg(not(target="js"))
-fn js_redirect(url_ : String) -> Unit { ignore(url_) }
-
-#cfg(not(target="js"))
-fn js_form_post(url_ : String, body_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
-  ignore((url_, body_))
-  on_error_("stub")
-}
-#cfg(not(target="js"))
-fn js_auth_fetch(url_ : String, http_method_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
+fn js_auth_fetch(url_ : String, http_method_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit, on_auth_error_ : (String) -> Unit) -> Unit {
   ignore((url_, http_method_, token_))
   on_error_("stub")
 }
 #cfg(not(target="js"))
-fn js_auth_post(url_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
+fn js_auth_post(url_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit, on_auth_error_ : (String) -> Unit) -> Unit {
   ignore((url_, token_))
   on_error_("stub")
 }
@@ -297,17 +303,6 @@ fn js_local_storage_get(key_ : String) -> String { ignore(key_); "" }
 fn js_local_storage_set(key_ : String, value_ : String) -> Unit { ignore((key_, value_)); () }
 #cfg(not(target="js"))
 fn js_local_storage_remove(key_ : String) -> Unit { ignore(key_); () }
-#cfg(not(target="js"))
-fn js_current_url() -> String { "/" }
-#cfg(not(target="js"))
-fn js_get_query_param(name_ : String) -> String { ignore(name_); "" }
-#cfg(not(target="js"))
-fn js_redirect(url_ : String) -> Unit { ignore(url_) }
-#cfg(not(target="js"))
-fn js_form_post(url_ : String, body_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
-  ignore((url_, body_))
-  on_error_("stub")
-}
 
 ///|
 fn fetch_cmd(
@@ -325,6 +320,7 @@ fn fetch_cmd(
       token,
       fn(body) { scheduler.add(emit(ok_fn(body))) },
       fn(e) { scheduler.add(emit(err_fn(e))) },
+      fn(_) { scheduler.add(emit(AuthExpired)) },
     )
   })
 }
@@ -337,6 +333,7 @@ fn post_cmd(emit : @cmd.Emit[Msg], url : String, token : String) -> @cmd.Cmd {
       token,
       fn(body) { scheduler.add(emit(ToggleResult(body))) },
       fn(e) { scheduler.add(emit(ToggleFailed(e))) },
+      fn(_) { scheduler.add(emit(AuthExpired)) },
     )
   })
 }
@@ -353,13 +350,13 @@ fn pkce_cmd(emit : @cmd.Emit[Msg]) -> @cmd.Cmd {
 
 ///|
 fn exchange_cmd(emit : @cmd.Emit[Msg], code : String) -> @cmd.Cmd {
-  let (auth_url, client_id) = parse_config()
+  let (auth_url_str, client_id_str, _) = parse_config()
   let pkce_verifier = js_session_get("pkce_verifier")
-  let body = "grant_type=authorization_code&code=" + code + "&redirect_uri=" + redirect_uri + "&client_id=" + client_id
+  let body = "grant_type=authorization_code&code=" + js_url_encode(code) + "&redirect_uri=" + js_url_encode(redirect_uri) + "&client_id=" + js_url_encode(client_id_str)
   let body = if pkce_verifier != "" { body + "&code_verifier=" + pkce_verifier } else { body }
   @cmd.custom_cmd(fn(scheduler : &@cmd.Scheduler) {
     js_form_post(
-      auth_url + "/application/o/token/",
+      auth_url_str + "/application/o/token/",
       body,
       fn(response_text) {
         let json = @json.parse(response_text) catch { _ => { scheduler.add(emit(LoginFailed("Invalid JSON"))); return } }
@@ -535,9 +532,9 @@ fn week_str(week : Double) -> String {
 ///|
 fn route_cmd(emit : @cmd.Emit[Msg], token : String, route : Route) -> @cmd.Cmd {
   match route {
-    Home => fetch_cmd(emit, api_base + "/subjects", "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
-    SubjectDetail(subject) => fetch_cmd(emit, api_base + "/subjects/" + subject + "/lessons", "GET", token, fn(b) { LessonsLoaded(b) }, fn(e) { LessonsFailed(e) })
-    LessonDetail(id) => fetch_cmd(emit, api_base + "/lessons/" + id, "GET", token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
+    Home => fetch_cmd(emit, api_base() + "/subjects", "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
+    SubjectDetail(subject) => fetch_cmd(emit, api_base() + "/subjects/" + subject + "/lessons", "GET", token, fn(b) { LessonsLoaded(b) }, fn(e) { LessonsFailed(e) })
+    LessonDetail(id) => fetch_cmd(emit, api_base() + "/lessons/" + id, "GET", token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
     Admin => @cmd.none
     Login => @cmd.none
     Callback(_) => @cmd.none
@@ -552,11 +549,15 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       match route {
         Callback(_) => {
           let code = js_get_query_param("code")
-          if code != "" {
+          let returned_state = js_get_query_param("state")
+          let stored_state = js_session_get("oauth_state")
+          if stored_state != "" && returned_state != stored_state {
+            (@nav.push_url("/login"), { ..model, route: Login, loading: false, error: "CSRF check failed: state mismatch" })
+          } else if code != "" {
             let cmd = exchange_cmd(emit, code)
             (cmd, { ..model, route, loading: true, error: "" })
           } else {
-            (@cmd.none, { ..model, route: Login, loading: false, error: "No authorization code received" })
+            (@nav.push_url("/login"), { ..model, route: Login, loading: false, error: "No authorization code received" })
           }
         }
         _ => match (model.token == "", route) {
@@ -584,28 +585,45 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     }
     SubjectsLoaded(body) => {
       let subjects = parse_subjects(body)
-      (@cmd.none, { ..model, subjects, loading: false, error: "" })
+      if subjects.length() == 0 && body != "" && body != "[]" {
+        (@cmd.none, { ..model, loading: false, error: "Failed to parse subjects data" })
+      } else {
+        (@cmd.none, { ..model, subjects, loading: false, error: "" })
+      }
     }
     SubjectsFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load subjects: " + err })
     LessonsLoaded(body) => {
       let lessons = parse_lessons(body)
-      (@cmd.none, { ..model, lessons, loading: false, error: "" })
+      if lessons.length() == 0 && body != "" && body != "[]" {
+        (@cmd.none, { ..model, loading: false, error: "Failed to parse lessons data" })
+      } else {
+        (@cmd.none, { ..model, lessons, loading: false, error: "" })
+      }
     }
     LessonsFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load lessons: " + err })
     LessonLoaded(body) => {
       let lesson = parse_lesson_content(body)
-      (@cmd.none, { ..model, current_lesson: lesson, loading: false, error: "" })
+      match lesson {
+        None => if body != "" && body != "[]" {
+          (@cmd.none, { ..model, loading: false, error: "Failed to parse lesson data" })
+        } else {
+          (@cmd.none, { ..model, current_lesson: None, loading: false, error: "" })
+        }
+        _ => (@cmd.none, { ..model, current_lesson: lesson, loading: false, error: "" })
+      }
     }
     LessonFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load lesson: " + err })
     ToggleLesson(id) =>
-      (post_cmd(emit, api_base + "/lessons/" + id + "/toggle", model.token), { ..model, loading: true })
+      if model.loading { (@cmd.none, model) } else {
+        (post_cmd(emit, api_base() + "/lessons/" + id + "/toggle", model.token), { ..model, loading: true })
+      }
     ToggleResult(_) => {
       let cmd = match model.current_lesson {
         Some(lesson) =>
-          fetch_cmd(emit, api_base + "/lessons/" + lesson.id, "GET", model.token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
+          fetch_cmd(emit, api_base() + "/lessons/" + lesson.id, "GET", model.token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
         None => @cmd.none
       }
       (cmd, { ..model, loading: true })
@@ -621,7 +639,7 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       (pkce_cmd(emit), { ..model, loading: true, error: "" })
     }
     PkceReady(data) => {
-      let (auth_url_str, client_id_str) = parse_config()
+      let (auth_url_str, client_id_str, _) = parse_config()
       let json = @json.parse(data) catch { _ => return (@cmd.none, { ..model, loading: false, error: "PKCE failed" }) }
       match json {
         Json::Object(obj) => {
@@ -632,7 +650,8 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
           }
           js_session_set("pkce_verifier", verifier)
           let state = "csrf_" + verifier[0:10].to_owned()
-          let url = auth_url_str + "/application/o/authorize/?client_id=" + client_id_str + "&redirect_uri=" + redirect_uri + "&response_type=code&scope=openid+profile+email&code_challenge=" + challenge + "&code_challenge_method=S256&state=" + state
+          js_session_set("oauth_state", state)
+          let url = auth_url_str + "/application/o/authorize/?client_id=" + js_url_encode(client_id_str) + "&redirect_uri=" + js_url_encode(redirect_uri) + "&response_type=code&scope=openid+profile+email&code_challenge=" + challenge + "&code_challenge_method=S256&state=" + js_url_encode(state)
           js_redirect(url)
           (@cmd.none, { ..model, loading: false, error: "" })
         }
@@ -643,10 +662,19 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       let token = body
       let role = role_from_jwt(token)
       js_local_storage_set("jwt_token", token)
+      js_session_set("pkce_verifier", "")
+      js_session_set("oauth_state", "")
       (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
     }
-    LoginFailed(err) =>
-      (@cmd.none, { ..model, loading: false, error: "Login failed: " + err })
+    LoginFailed(err) => {
+      js_session_set("pkce_verifier", "")
+      js_session_set("oauth_state", "")
+      (@nav.push_url("/login"), { ..model, loading: false, error: "Login failed: " + err, route: Login })
+    }
+    AuthExpired => {
+      js_local_storage_remove("jwt_token")
+      (@nav.push_url("/login"), { ..init_model(), route: Login, error: "Session expired. Please sign in again." })
+    }
   }
 }
 

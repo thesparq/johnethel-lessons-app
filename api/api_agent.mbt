@@ -36,7 +36,9 @@ fn ApiAgent::new(principal : @common.Principal) -> ApiAgent {
 fn auth_user(auth_header : String, p : @common.Principal) -> (String, String) {
   match p {
     @common.Principal::Oidc(oidc) => validate_principal_claims(oidc, auth_header)
-    @common.Principal::Anonymous | _ => auth_manual(auth_header)
+    @common.Principal::Anonymous => auth_manual(auth_header)
+    @common.Principal::Agent(_) => auth_manual(auth_header)
+    @common.Principal::GolemUser(_) => auth_manual(auth_header)
   }
 }
 
@@ -50,8 +52,8 @@ fn validate_principal_claims(oidc : @common.OidcPrincipal, auth_header : String)
         let mut r = "student"
         for g in groups {
           match g {
-            Json::String("teachers") => { r = "teacher"; found = true; break }
             Json::String("admin") => { r = "admin"; found = true; break }
+            Json::String("teachers") => { r = "teacher"; found = true; break }
             Json::String("students") => { r = "student"; found = true; break }
             _ => ()
           }
@@ -102,7 +104,7 @@ fn parse_jwt(token : String) -> (String, String) {
   if parts.length() < 2 { return ("anonymous", "student") }
   let b64 = fix_base64url(parts[1].to_owned())
   let bytes = @base64.decode(b64) catch { _ => return ("anonymous", "student") }
-  let decoded = bytes_to_str_simple(bytes)
+  let decoded = @utf8.decode_lossy(bytes.view())
   let json = @json.parse(decoded) catch { _ => return ("anonymous", "student") }
   match json {
     Json::Object(obj) => {
@@ -217,6 +219,8 @@ fn user_toggle_lesson(user_id : String, role : String, lesson_id : String) -> Bo
 #derive.endpoint_header("Authorization", "auth_header")
 pub fn ApiAgent::assign_teacher(self : Self, teacher_id : String, subject : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
+  if !validate_subject_name(subject) { return auth_error_json("Invalid subject name") }
+  if teacher_id == "" { return auth_error_json("Invalid teacher ID") }
   let (_user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
   if _user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   if role != "admin" { return auth_error_json("Forbidden: admin only") }

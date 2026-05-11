@@ -52,6 +52,12 @@ fn get_env(name : String) -> String {
 }
 
 ///|
+fn base64_encode(s : String) -> String {
+  let bytes = Bytes::from_fixedarray(str_to_bytes(s))
+  @base64.encode(bytes.view())
+}
+
+///|
 fn str_to_bytes(s : String) -> FixedArray[Byte] {
   let bytes = FixedArray::make(s.length(), b'\x00')
   for i = 0; i < s.length(); i = i + 1 {
@@ -99,7 +105,8 @@ fn surrealdb_query(sql : String) -> Result[Json, String] {
   let db = get_env("SURREALDB_DB")
 
   let headers = @httpTypes.Fields::fields()
-  let _ = headers.append("Authorization", str_to_bytes("Basic cm9vdDpyb290"))
+  let auth_value = "Basic " + base64_encode("root:" + _token)
+  let _ = headers.append("Authorization", str_to_bytes(auth_value))
   let _ = headers.append("surreal-ns", str_to_bytes(ns))
   let _ = headers.append("surreal-db", str_to_bytes(db))
   let _ = headers.append("Content-Type", str_to_bytes("text/plain"))
@@ -256,7 +263,7 @@ fn validate_lesson_id(id : String) -> Bool {
 
 ///|
 fn is_safe_subject_char(c : Char) -> Bool {
-  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '&'
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-'
 }
 
 ///|
@@ -277,12 +284,14 @@ pub fn UserAgent::get_subjects(self : Self) -> String {
     None => ()
   }
   let sql = "SELECT subject FROM lesson_content GROUP BY subject;"
-  let json_str = match query_result(sql) {
-    Ok(result) => result.stringify()
+  match query_result(sql) {
+    Ok(result) => {
+      let json_str = result.stringify()
+      self.cache_set(cache_key, json_str, 600)
+      json_str
+    }
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
-  self.cache_set(cache_key, json_str, 600) // 10 min TTL
-  json_str
 }
 
 ///|
@@ -294,10 +303,9 @@ pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
     None => ()
   }
   let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
-  let json_str = match query_result(sql) {
+  match query_result(sql) {
     Ok(result) => {
-      // Filter inactive lessons for students
-      if self.role == "student" {
+      let json_str = if self.role == "student" {
         match result {
           Json::Array(arr) => {
             let filtered = arr.filter(fn(item) {
@@ -318,11 +326,11 @@ pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
       } else {
         result.stringify()
       }
+      self.cache_set(cache_key, json_str, 600)
+      json_str
     }
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
-  self.cache_set(cache_key, json_str, 600) // 10 min TTL
-  json_str
 }
 
 ///|
@@ -334,31 +342,36 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
     None => ()
   }
   let sql = "SELECT * FROM " + lesson_id + ";"
-  let json_str = match query_result(sql) {
+  match query_result(sql) {
     Ok(result) => {
-      match result {
+      let json_str = match result {
         Json::Array(arr) => {
           if arr.length() > 0 {
-            let filtered = filter_lesson_fields(arr[0])
-            Json::array([filtered]).stringify()
+            if self.role == "student" {
+              let filtered = filter_lesson_fields(arr[0])
+              Json::array([filtered]).stringify()
+            } else {
+              Json::array([arr[0]]).stringify()
+            }
           } else {
             "[]"
           }
         }
         _ => result.stringify()
       }
+      self.cache_set(cache_key, json_str, 300)
+      json_str
     }
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
-  self.cache_set(cache_key, json_str, 300) // 5 min TTL
-  json_str
 }
 
 ///|
-/// Toggle lesson active state (teacher only).
+/// Toggle lesson active state (teacher or admin only).
 /// Updates SurrealDB directly. Returns new active value.
 pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   if !validate_lesson_id(lesson_id) { return false }
+  if self.role != "teacher" && self.role != "admin" { return false }
   // Read current state and subject
   let select_sql = "SELECT active, subject FROM " + lesson_id + ";"
   let (current, subject) = match query_result(select_sql) {
@@ -379,16 +392,16 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
                 }
                 (active, subject)
               }
-              _ => (true, "")
+              _ => return false
             }
           } else {
-            (true, "")
+            return false
           }
         }
-        _ => (true, "")
+        _ => return false
       }
     }
-    Err(_) => (true, "")
+    Err(_) => return false
   }
   // Update to opposite
   let next = !current
