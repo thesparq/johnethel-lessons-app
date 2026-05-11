@@ -107,6 +107,7 @@ struct Model {
   route : Route
   token : String
   role : String
+  class_level : String
   subjects : Array[SubjectInfo]
   lessons : Array[LessonInfo]
   current_lesson : Option[LessonContent]
@@ -120,6 +121,7 @@ fn init_model() -> Model {
     route: Home,
     token: "",
     role: "student",
+    class_level: "",
     subjects: [],
     lessons: [],
     current_lesson: None,
@@ -144,8 +146,24 @@ extern "js" fn js_jwt_role(token : String) -> String =
   #|  } catch(e) { return "student"; }
   #| }
 
+#cfg(target="js")
+extern "js" fn js_get_user_class(token : String) -> String =
+  #|(token) => {
+  #|  try {
+  #|    const parts = token.split(".");
+  #|    if (parts.length < 2) return "";
+  #|    const payload = JSON.parse(atob(parts[1].replace(/-/g,"+").replace(/_/g,"/")));
+  #|    const groups = payload.groups || [];
+  #|    const classes = ["JSS_1","JSS_2","JSS_3","SS1","SS2","SS3"];
+  #|    for (const g of groups) { if (classes.includes(g)) return g; }
+  #|    return "";
+  #|  } catch(e) { return ""; }
+  #| }
+
 #cfg(not(target="js"))
 fn js_jwt_role(token_ : String) -> String { ignore(token_); "student" }
+#cfg(not(target="js"))
+fn js_get_user_class(token_ : String) -> String { ignore(token_); "" }
 
 ///|
 fn role_from_jwt(token : String) -> String {
@@ -661,10 +679,11 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     AuthCallback(body) => {
       let token = body
       let role = role_from_jwt(token)
+      let class_level = js_get_user_class(token)
       js_local_storage_set("jwt_token", token)
       js_session_set("pkce_verifier", "")
       js_session_set("oauth_state", "")
-      (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
+      (@nav.push_url("/"), { ..model, token, role, class_level, error: "", route: Home })
     }
     LoginFailed(err) => {
       js_session_set("pkce_verifier", "")
@@ -704,10 +723,11 @@ fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     @html.a(href="/", style=["font-weight: bold", "text-decoration: none", "color: #333"], "Johnethel Lessons"),
   )
   if model.token != "" {
+    let info = if model.class_level != "" { model.role + " \u00b7 " + model.class_level } else { model.role }
     nav_items.push(
       @html.span(
         style=["margin-left: 12px", "color: #666", "font-size: 12px"],
-        "Role: " + model.role,
+        info,
       ),
     )
     if model.role == "admin" {
@@ -911,6 +931,7 @@ fn subscriptions(emit : @cmd.Emit[Msg], _model : Model) -> @sub.Sub {
 fn main {
   let token = js_local_storage_get("jwt_token")
   let role = role_from_jwt(token)
+  let class_level = js_get_user_class(token)
   let url_path = js_current_url()
   let initial_route = route_from_path(url_path)
   let route = if token == "" && initial_route != Login && initial_route != Callback("") {
@@ -923,7 +944,7 @@ fn main {
     Home | SubjectDetail(_) | LessonDetail(_) | Callback(_) => true
     _ => false
   }
-  let model = { ..init_model(), token, role, route, loading }
+  let model = { ..init_model(), token, role, class_level, route, loading }
   let (_emit, root) = @rabbita.cell_with_emit(
     model~,
     update~,
