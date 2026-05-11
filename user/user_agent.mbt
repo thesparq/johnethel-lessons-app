@@ -100,16 +100,16 @@ fn surreal_url_parts() -> (@httpTypes.Scheme, String, String) {
 ///|
 fn surrealdb_query(sql : String) -> Result[Json, String] {
   let (scheme, authority, path) = surreal_url_parts()
-  let _token = get_env("SURREALDB_TOKEN")
+  let db_user = get_env("SURREALDB_USER")
+  let db_pass = get_env("SURREALDB_TOKEN")
   let ns = get_env("SURREALDB_NS")
   let db = get_env("SURREALDB_DB")
 
   let headers = @httpTypes.Fields::fields()
-  let db_user = get_env("SURREALDB_USER")
   let auth_value = if db_user != "" {
-    "Basic " + base64_encode(db_user + ":" + _token)
+    "Basic " + base64_encode(db_user + ":" + db_pass)
   } else {
-    "Bearer " + _token
+    "Bearer " + db_pass
   }
   let _ = headers.append("Authorization", str_to_bytes(auth_value))
   let _ = headers.append("surreal-ns", str_to_bytes(ns))
@@ -199,6 +199,10 @@ fn filter_lesson_fields(lesson : Json) -> Json {
         }
         if key == "lesson_steps" {
           new_obj[key] = filter_lesson_steps(value)
+        } else if key == "mcq_questions" {
+          new_obj[key] = filter_mcq_questions(value, 5)
+        } else if key == "theoretical_questions" {
+          new_obj[key] = filter_theoretical_questions(value, 5)
         } else {
           new_obj[key] = value
         }
@@ -207,6 +211,80 @@ fn filter_lesson_fields(lesson : Json) -> Json {
     }
     _ => lesson
   }
+}
+
+///|
+fn filter_mcq_questions(questions : Json, count : Int) -> Json {
+  match questions {
+    Json::Array(arr) => {
+      let filtered : Array[Json] = []
+      for q in arr {
+        match q {
+          Json::Object(obj) => {
+            let new_q : Map[String, Json] = {}
+            for pair in obj {
+              let key = pair.0
+              if key != "correct_answer" && key != "explanation" {
+                new_q[key] = pair.1
+              }
+            }
+            filtered.push(Json::object(new_q))
+          }
+          _ => filtered.push(q)
+        }
+      }
+      Json::array(take_random(filtered, count))
+    }
+    _ => questions
+  }
+}
+
+///|
+fn filter_theoretical_questions(questions : Json, count : Int) -> Json {
+  match questions {
+    Json::Array(arr) => {
+      let filtered : Array[Json] = []
+      for q in arr {
+        match q {
+          Json::Object(obj) => {
+            let new_q : Map[String, Json] = {}
+            for pair in obj {
+              let key = pair.0
+              if key != "model_answer" && key != "marking_scheme" {
+                new_q[key] = pair.1
+              }
+            }
+            filtered.push(Json::object(new_q))
+          }
+          _ => filtered.push(q)
+        }
+      }
+      Json::array(take_random(filtered, count))
+    }
+    _ => questions
+  }
+}
+
+///|
+fn take_random(arr : Array[Json], count : Int) -> Array[Json] {
+  if arr.length() <= count { return arr }
+  let capacity = arr.length()
+  let indices : Array[Int] = []
+  for i = 0; i < capacity; i = i + 1 { indices.push(i) }
+  let seed = @wallClock.now().seconds.to_int() % 10000
+  let mut r = seed
+  for i = 0; i < indices.length() - 1; i = i + 1 {
+    r = (r * 1103515245 + 12345) % 2000000000
+    let j = i + (r % (indices.length() - i))
+    let tmp = indices[i]
+    indices[i] = indices[j]
+    indices[j] = tmp
+  }
+  let result : Array[Json] = []
+  for i = 0; i < count; i = i + 1 {
+    result.push(arr[indices[i]])
+  }
+  result
 }
 
 ///|
