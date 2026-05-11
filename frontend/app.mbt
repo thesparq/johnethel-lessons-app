@@ -288,14 +288,6 @@ extern "js" fn js_form_post(
   #| }
 
 #cfg(not(target="js"))
-fn js_redirect(url_ : String) -> Unit { ignore(url_) }
-
-#cfg(not(target="js"))
-fn js_form_post(url_ : String, body_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
-  ignore((url_, body_))
-  on_error_("stub")
-}
-#cfg(not(target="js"))
 fn js_auth_fetch(url_ : String, http_method_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit, on_auth_error_ : (String) -> Unit) -> Unit {
   ignore((url_, http_method_, token_))
   on_error_("stub")
@@ -311,17 +303,6 @@ fn js_local_storage_get(key_ : String) -> String { ignore(key_); "" }
 fn js_local_storage_set(key_ : String, value_ : String) -> Unit { ignore((key_, value_)); () }
 #cfg(not(target="js"))
 fn js_local_storage_remove(key_ : String) -> Unit { ignore(key_); () }
-#cfg(not(target="js"))
-fn js_current_url() -> String { "/" }
-#cfg(not(target="js"))
-fn js_get_query_param(name_ : String) -> String { ignore(name_); "" }
-#cfg(not(target="js"))
-fn js_redirect(url_ : String) -> Unit { ignore(url_) }
-#cfg(not(target="js"))
-fn js_form_post(url_ : String, body_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
-  ignore((url_, body_))
-  on_error_("stub")
-}
 
 ///|
 fn fetch_cmd(

@@ -112,12 +112,25 @@
 
 ---
 
-## Deferred (Low Priority)
+## Deferred (Low Priority) — DONE
 
-- [ ] Dead code removal: ToggleFork, AuthAgent component, AdminAgent.spawn_user
-- [ ] Duplicate JS stubs cleanup
+- [x] Remove duplicate `js_redirect`, `js_form_post`, `js_current_url`, `js_get_query_param` non-JS stubs
+- [x] Remove wildcard `_` from Principal match in `auth_user` (explicit variant matching)
+- [x] Add `link rel=icon` favicon to index.html
+- [x] Add `<noscript>` fallback to index.html
+- [x] Add viewport meta tag (M10, committed earlier)
+
+### Remaining (Phase 3 — Future)
+
+- [ ] Dead code removal: ToggleFork, AuthAgent component
 - [ ] 1MB response buffer upgrade
 - [ ] Token refresh / silent re-authentication
-- [ ] CSP, favicon, noscript
+- [ ] CSP headers
+- [ ] Rename `jwt.mbt` → `validation.mbt`
 - [ ] Structured logging
 - [ ] LRU cache eviction
+- [ ] Manual JSON string building → proper `@json` serialization
+- [ ] `.to_owned()` cleanup in parse_jwt
+- [ ] Max length enforcement on validated inputs
+- [ ] `get_lesson` response shape consistency
+- [ ] Static agent file descriptor cleanup

@@ -36,7 +36,9 @@ fn ApiAgent::new(principal : @common.Principal) -> ApiAgent {
 fn auth_user(auth_header : String, p : @common.Principal) -> (String, String) {
   match p {
     @common.Principal::Oidc(oidc) => validate_principal_claims(oidc, auth_header)
-    @common.Principal::Anonymous | _ => auth_manual(auth_header)
+    @common.Principal::Anonymous => auth_manual(auth_header)
+    @common.Principal::Agent(_) => auth_manual(auth_header)
+    @common.Principal::GolemUser(_) => auth_manual(auth_header)
   }
 }
 
