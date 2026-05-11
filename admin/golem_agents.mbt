@@ -5,7 +5,7 @@ fn init{
     name: "AdminAgent",
     agent_type: {
       type_name: "AdminAgent",
-      description: "Admin agent — durable singleton, global source of truth for toggles",
+      description: "Admin agent — durable singleton for teacher-subject assignments.",
       source_language: "moonbit",
       constructor_: {
         name: Some("new"),
@@ -14,40 +14,6 @@ fn init{
         input_schema: @rpcTypes.DataSchema::Tuple([]),
       },
       methods: [
-        {
-          name: "spawn_user",
-          description: "spawn_user",
-          http_endpoint: [],
-          prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "user_id",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "role",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "name",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-          ]),
-          output_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "result",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[Bool]),
-              ),
-            ),
-          ]),
-        },
         {
           name: "assign_teacher",
           description: "assign_teacher",
@@ -98,50 +64,6 @@ fn init{
             ),
           ]),
         },
-        {
-          name: "toggle_lesson",
-          description: "Toggle lesson active state globally. Returns new active value.",
-          http_endpoint: [],
-          prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "lesson_id",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-          ]),
-          output_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "result",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[Bool]),
-              ),
-            ),
-          ]),
-        },
-        {
-          name: "is_lesson_active",
-          description: "Get global active state for a lesson (defaults to true).",
-          http_endpoint: [],
-          prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "lesson_id",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-          ]),
-          output_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "result",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[Bool]),
-              ),
-            ),
-          ]),
-        },
       ],
       dependencies: [],
       mode: @common.AgentMode::DURABLE,
@@ -180,19 +102,6 @@ impl @agents.RawAgent for AdminAgent with invoke(
 ) {
   try {
     match method_name {
-      "spawn_user" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 3 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 3 elements, got " + elements.length().to_string(),
-          )
-        }
-        let user_id :String = @schema.from_element_value_as(elements[0])
-        let role :String = @schema.from_element_value_as(elements[1])
-        let name :String = @schema.from_element_value_as(elements[2])
-        let result = self.spawn_user(user_id, role, name)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
       "assign_teacher" => {
         let elements = @extractor.extract_tuple(input)
         guard elements.length() == 2 else {
@@ -214,28 +123,6 @@ impl @agents.RawAgent for AdminAgent with invoke(
         }
         let subject :String = @schema.from_element_value_as(elements[0])
         let result = self.get_teacher_for_subject(subject)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      "toggle_lesson" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 1 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 1 elements, got " + elements.length().to_string(),
-          )
-        }
-        let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let result = self.toggle_lesson(lesson_id)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      "is_lesson_active" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 1 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 1 elements, got " + elements.length().to_string(),
-          )
-        }
-        let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let result = self.is_lesson_active(lesson_id)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       other => Err(@common.AgentError::InvalidMethod(other))

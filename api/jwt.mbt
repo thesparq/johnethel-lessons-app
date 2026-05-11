@@ -19,7 +19,7 @@ fn validate_subject_name(name : String) -> Bool {
   let chars = name.to_array()
   if chars.length() == 0 { return false }
   for c in chars {
-    let ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '&'
+    let ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-'
     if !ok { return false }
   }
   true

@@ -83,7 +83,8 @@ pub fn FileServerAgent::download_file(
   if path == "config.js" {
     let auth_url = get_env_s("AUTHENTIK_URL", "")
     let client_id = get_env_s("AUTHENTIK_CLIENT_ID", "")
-    let script = "window.__CONFIG__={authentikUrl:\"" + auth_url + "\",clientId:\"" + client_id + "\"};"
+    let api_url = get_env_s("API_URL", "http://johnethel-lessons-app.localhost:9006")
+    let script = "window.__CONFIG__={authentikUrl:\"" + auth_url + "\",clientId:\"" + client_id + "\",apiUrl:\"" + api_url + "\"};"
     let bytes = str_to_fixed_bytes(script)
     return @types.UnstructuredBinary::from_inline(bytes, mime_type="application/javascript")
   }

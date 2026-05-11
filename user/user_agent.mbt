@@ -263,7 +263,7 @@ fn validate_lesson_id(id : String) -> Bool {
 
 ///|
 fn is_safe_subject_char(c : Char) -> Bool {
-  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '&'
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-'
 }
 
 ///|
@@ -367,10 +367,11 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
 }
 
 ///|
-/// Toggle lesson active state (teacher only).
+/// Toggle lesson active state (teacher or admin only).
 /// Updates SurrealDB directly. Returns new active value.
 pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   if !validate_lesson_id(lesson_id) { return false }
+  if self.role != "teacher" && self.role != "admin" { return false }
   // Read current state and subject
   let select_sql = "SELECT active, subject FROM " + lesson_id + ";"
   let (current, subject) = match query_result(select_sql) {
@@ -391,16 +392,16 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
                 }
                 (active, subject)
               }
-              _ => (true, "")
+              _ => return false
             }
           } else {
-            (true, "")
+            return false
           }
         }
-        _ => (true, "")
+        _ => return false
       }
     }
-    Err(_) => (true, "")
+    Err(_) => return false
   }
   // Update to opposite
   let next = !current
