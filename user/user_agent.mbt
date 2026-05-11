@@ -282,13 +282,14 @@ fn validate_subject_name(name : String) -> Bool {
 }
 
 ///|
-pub fn UserAgent::get_subjects(self : Self) -> String {
-  let cache_key = "subjects"
+pub fn UserAgent::get_subjects(self : Self, class_level : String) -> String {
+  let cache_key = "subjects:" + class_level
   match self.cache_get(cache_key) {
     Some(cached) => return cached
     None => ()
   }
-  let sql = "SELECT subject FROM lesson_content GROUP BY subject;"
+  let filter = if class_level != "" { " AND class_level = '" + class_level + "' " } else { "" }
+  let sql = "SELECT subject FROM lesson_content WHERE class_level != ''" + filter + "GROUP BY subject;"
   match query_result(sql) {
     Ok(result) => {
       let json_str = result.stringify()
@@ -300,14 +301,15 @@ pub fn UserAgent::get_subjects(self : Self) -> String {
 }
 
 ///|
-pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
+pub fn UserAgent::get_lessons(self : Self, subject : String, class_level : String) -> String {
   if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
-  let cache_key = "list:" + subject
+  let cache_key = "list:" + class_level + ":" + subject
   match self.cache_get(cache_key) {
     Some(cached) => return cached
     None => ()
   }
-  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
+  let filter = if class_level != "" { " AND class_level = '" + class_level + "' " } else { "" }
+  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "'" + filter + "ORDER BY week;"
   match query_result(sql) {
     Ok(result) => {
       let json_str = if self.role == "student" {
@@ -378,8 +380,8 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   if !validate_lesson_id(lesson_id) { return false }
   if self.role != "teacher" && self.role != "admin" { return false }
   // Read current state and subject
-  let select_sql = "SELECT active, subject FROM " + lesson_id + ";"
-  let (current, subject) = match query_result(select_sql) {
+  let select_sql = "SELECT active, subject, class_level FROM " + lesson_id + ";"
+  let (current, subject, class_level) = match query_result(select_sql) {
     Ok(result) => {
       match result {
         Json::Array(arr) => {
@@ -395,7 +397,11 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
                   Some(Json::String(s)) => s
                   _ => ""
                 }
-                (active, subject)
+                let class_level = match obj.get("class_level") {
+                  Some(Json::String(s)) => s
+                  _ => ""
+                }
+                (active, subject, class_level)
               }
               _ => return false
             }
@@ -417,7 +423,10 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   // Invalidate caches
   self.cache_invalidate("content:" + lesson_id)
   if subject != "" {
-    self.cache_invalidate("list:" + subject)
+    self.cache_invalidate("list::" + subject)
+    if class_level != "" {
+      self.cache_invalidate("list:" + class_level + ":" + subject)
+    }
   }
   next
 }

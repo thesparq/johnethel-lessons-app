@@ -33,7 +33,25 @@ fn ApiAgent::new(principal : @common.Principal) -> ApiAgent {
 }
 
 ///|
-fn auth_user(auth_header : String, p : @common.Principal) -> (String, String) {
+let secondary_classes : Array[String] = ["JSS_1", "JSS_2", "JSS_3", "SS1", "SS2", "SS3"]
+
+///|
+fn extract_class(groups : Array[Json]) -> String {
+  for g in groups {
+    match g {
+      Json::String(s) => {
+        for c in secondary_classes {
+          if s == c { return c }
+        }
+      }
+      _ => ()
+    }
+  }
+  ""
+}
+
+///|
+fn auth_user(auth_header : String, p : @common.Principal) -> (String, String, String) {
   match p {
     @common.Principal::Oidc(oidc) => validate_principal_claims(oidc, auth_header)
     @common.Principal::Anonymous => auth_manual(auth_header)
@@ -43,13 +61,14 @@ fn auth_user(auth_header : String, p : @common.Principal) -> (String, String) {
 }
 
 ///|
-fn validate_principal_claims(oidc : @common.OidcPrincipal, auth_header : String) -> (String, String) {
+fn validate_principal_claims(oidc : @common.OidcPrincipal, auth_header : String) -> (String, String, String) {
   let json = @json.parse(oidc.claims) catch { _ => return auth_manual(auth_header) }
   match json {
     Json::Object(obj) => match obj.get("groups") {
       Some(Json::Array(groups)) => {
         let mut found = false
         let mut r = "student"
+        let class_level = extract_class(groups)
         for g in groups {
           match g {
             Json::String("admin") => { r = "admin"; found = true; break }
@@ -58,7 +77,7 @@ fn validate_principal_claims(oidc : @common.OidcPrincipal, auth_header : String)
             _ => ()
           }
         }
-        if found { (oidc.sub, r) } else { auth_manual(auth_header) }
+        if found { (oidc.sub, r, class_level) } else { auth_manual(auth_header) }
       }
       _ => auth_manual(auth_header)
     }
@@ -67,13 +86,13 @@ fn validate_principal_claims(oidc : @common.OidcPrincipal, auth_header : String)
 }
 
 ///|
-fn auth_manual(auth_header : String) -> (String, String) {
-  if auth_header == "" { return ("anonymous", "student") }
+fn auth_manual(auth_header : String) -> (String, String, String) {
+  if auth_header == "" { return ("anonymous", "student", "") }
   let token = auth_header
   let prefix = "Bearer "
   let token = if token.has_prefix(prefix) { token[prefix.length():].to_owned() } else { token }
   if token.contains(".") { return parse_jwt(token) }
-  ("anonymous", "student")
+  ("anonymous", "student", "")
 }
 
 ///|
@@ -99,16 +118,20 @@ fn bytes_to_str_simple(b : Bytes) -> String {
 }
 
 ///|
-fn parse_jwt(token : String) -> (String, String) {
+fn parse_jwt(token : String) -> (String, String, String) {
   let parts = token.split(".").to_array()
-  if parts.length() < 2 { return ("anonymous", "student") }
+  if parts.length() < 2 { return ("anonymous", "student", "") }
   let b64 = fix_base64url(parts[1].to_owned())
-  let bytes = @base64.decode(b64) catch { _ => return ("anonymous", "student") }
+  let bytes = @base64.decode(b64) catch { _ => return ("anonymous", "student", "") }
   let decoded = @utf8.decode_lossy(bytes.view())
-  let json = @json.parse(decoded) catch { _ => return ("anonymous", "student") }
+  let json = @json.parse(decoded) catch { _ => return ("anonymous", "student", "") }
   match json {
     Json::Object(obj) => {
       let user_id = match obj.get("sub") { Some(Json::String(s)) => s; _ => "" }
+      let class_level = match obj.get("groups") {
+        Some(Json::Array(groups)) => extract_class(groups)
+        _ => ""
+      }
       let role = match obj.get("groups") {
         Some(Json::Array(groups)) => {
           let mut found = false
@@ -125,9 +148,9 @@ fn parse_jwt(token : String) -> (String, String) {
         }
         _ => "student"
       }
-      if user_id != "" && role != "anonymous" { (user_id, role) } else { ("anonymous", "student") }
+      if user_id != "" && role != "anonymous" { (user_id, role, class_level) } else { ("anonymous", "student", "") }
     }
-    _ => ("anonymous", "student")
+    _ => ("anonymous", "student", "")
   }
 }
 
@@ -160,9 +183,9 @@ pub fn ApiAgent::get_config(self : Self) -> String {
 #derive.endpoint_header("Authorization", "auth_header")
 pub fn ApiAgent::get_subjects(self : Self, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
-  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  let (user_id, role, class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
   if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
-  user_get_subjects(user_id, role)
+  user_get_subjects(user_id, role, class_level)
 }
 
 ///|
@@ -172,9 +195,9 @@ pub fn ApiAgent::get_subjects(self : Self, auth_header : String?) -> String rais
 pub fn ApiAgent::get_lessons(self : Self, subject_id : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
   if !validate_subject_name(subject_id) { return auth_error_json("Invalid subject name") }
-  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  let (user_id, role, class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
   if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
-  user_get_lessons(user_id, role, subject_id)
+  user_get_lessons(user_id, role, subject_id, class_level)
 }
 
 ///|
@@ -184,7 +207,7 @@ pub fn ApiAgent::get_lessons(self : Self, subject_id : String, auth_header : Str
 pub fn ApiAgent::get_lesson(self : Self, lesson_id : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
   if !validate_lesson_id(lesson_id) { return auth_error_json("Invalid lesson ID") }
-  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  let (user_id, role, _class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
   if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   user_get_lesson(user_id, role, lesson_id)
 }
@@ -196,7 +219,7 @@ pub fn ApiAgent::get_lesson(self : Self, lesson_id : String, auth_header : Strin
 pub fn ApiAgent::toggle_lesson(self : Self, lesson_id : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
   if !validate_lesson_id(lesson_id) { return auth_error_json("Invalid lesson ID") }
-  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  let (user_id, role, _class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
   if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   if role != "teacher" && role != "admin" { return auth_error_json("Forbidden: teachers only") }
   let toggled = user_toggle_lesson(user_id, role, lesson_id)
@@ -221,7 +244,7 @@ pub fn ApiAgent::assign_teacher(self : Self, teacher_id : String, subject : Stri
   let _ = self
   if !validate_subject_name(subject) { return auth_error_json("Invalid subject name") }
   if teacher_id == "" { return auth_error_json("Invalid teacher ID") }
-  let (_user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  let (_user_id, role, _class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
   if _user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   if role != "admin" { return auth_error_json("Forbidden: admin only") }
   let assigned = admin_assign_teacher(teacher_id, subject)

@@ -95,7 +95,14 @@ fn init{
           description: "get_subjects",
           http_endpoint: [],
           prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([]),
+          input_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "class_level",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
           output_schema: @rpcTypes.DataSchema::Tuple([
             (
               "result",
@@ -113,6 +120,12 @@ fn init{
           input_schema: @rpcTypes.DataSchema::Tuple([
             (
               "subject",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+            (
+              "class_level",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
               ),
@@ -239,23 +252,25 @@ impl @agents.RawAgent for UserAgent with invoke(
     match method_name {
       "get_subjects" => {
         let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 0 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 0 elements, got " + elements.length().to_string(),
-          )
-        }
-        let result = self.get_subjects()
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      "get_lessons" => {
-        let elements = @extractor.extract_tuple(input)
         guard elements.length() == 1 else {
           raise  @common.AgentError::InvalidInput(
             "Expected 1 elements, got " + elements.length().to_string(),
           )
         }
+        let class_level :String = @schema.from_element_value_as(elements[0])
+        let result = self.get_subjects(class_level)
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
+      }
+      "get_lessons" => {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 2 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 2 elements, got " + elements.length().to_string(),
+          )
+        }
         let subject :String = @schema.from_element_value_as(elements[0])
-        let result = self.get_lessons(subject)
+        let class_level :String = @schema.from_element_value_as(elements[1])
+        let result = self.get_lessons(subject, class_level)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       "get_lesson" => {

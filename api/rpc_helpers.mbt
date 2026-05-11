@@ -2,7 +2,7 @@
 /// UserAgent is per-user. AdminAgent is the durable singleton.
 
 /// Call UserAgent::get_subjects
-fn user_get_subjects(user_id : String, role : String) -> String raise @common.AgentError {
+fn user_get_subjects(user_id : String, role : String, class_level : String) -> String raise @common.AgentError {
   let ctor_data = @rpcTypes.DataValue::Tuple([
     @schema.to_element_value_as(user_id),
     @schema.to_element_value_as(role),
@@ -11,14 +11,14 @@ fn user_get_subjects(user_id : String, role : String) -> String raise @common.Ag
   defer client.drop()
   let result = client.invoke_and_await(
     "get_subjects",
-    @rpcTypes.DataValue::Tuple([]),
+    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
   )
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
 }
 
 /// Call UserAgent::get_lessons
-fn user_get_lessons(user_id : String, role : String, subject : String) -> String raise @common.AgentError {
+fn user_get_lessons(user_id : String, role : String, subject : String, class_level : String) -> String raise @common.AgentError {
   let ctor_data = @rpcTypes.DataValue::Tuple([
     @schema.to_element_value_as(user_id),
     @schema.to_element_value_as(role),
@@ -27,7 +27,7 @@ fn user_get_lessons(user_id : String, role : String, subject : String) -> String
   defer client.drop()
   let result = client.invoke_and_await(
     "get_lessons",
-    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(subject)]),
+    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(subject), @schema.to_element_value_as(class_level)]),
   )
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
