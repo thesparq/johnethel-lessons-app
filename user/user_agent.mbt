@@ -53,7 +53,10 @@ fn get_env(name : String) -> String {
 
 ///|
 fn base64_encode(s : String) -> String {
-  let bytes = Bytes::from_fixedarray(str_to_bytes(s))
+  let fixed = str_to_bytes(s)
+  let arr : Array[Byte] = []
+  for i = 0; i < fixed.length(); i = i + 1 { arr.push(fixed[i]) }
+  let bytes = Bytes::from_array(arr)
   @base64.encode(bytes.view())
 }
 
@@ -68,7 +71,10 @@ fn str_to_bytes(s : String) -> FixedArray[Byte] {
 
 ///|
 fn bytes_to_str(bytes : FixedArray[Byte]) -> String {
-  String::from_array(bytes.map(fn(b) { b.to_int().unsafe_to_char() }))
+  let arr : Array[Byte] = []
+  for i = 0; i < bytes.length(); i = i + 1 { arr.push(bytes[i]) }
+  let b = Bytes::from_array(arr)
+  @utf8.decode_lossy(b.view())
 }
 
 ///|
@@ -140,13 +146,26 @@ fn surrealdb_query(sql : String) -> Result[Json, String] {
           let status = response.status()
           let incoming_body = response.consume().unwrap()
           let stream = incoming_body.stream().unwrap()
-          let bytes = stream.blocking_read(1048576UL).unwrap()
+          let all_bytes : Array[Byte] = []
+          let chunk_size : UInt64 = 65536
+          while true {
+            match stream.blocking_read(chunk_size) {
+              Ok(bytes) => {
+                if bytes.length() == 0 { break }
+                for b in bytes { all_bytes.push(b) }
+              }
+              Err(_) => break
+            }
+          }
+          let bytes = FixedArray::make(all_bytes.length(), b'\x00')
+          for i = 0; i < all_bytes.length(); i = i + 1 { bytes[i] = all_bytes[i] }
           stream.drop()
           let _ = @httpTypes.IncomingBody::finish(incoming_body)
           let body_str = bytes_to_str(bytes)
           if status >= 200 && status < 300 {
+            let body_str = bytes_to_str(bytes)
             let json = @json.parse(body_str) catch {
-              _ => return Err("Failed to parse JSON response")
+              e => return Err("JSON parse error: " + e.to_string())
             }
             Ok(json)
           } else {
@@ -339,7 +358,7 @@ fn validate_lesson_id(id : String) -> Bool {
   let chars = suffix.to_array()
   if chars.length() == 0 { return false }
   for c in chars {
-    if c < '0' || c > '9' { return false }
+    if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { return false }
   }
   true
 }

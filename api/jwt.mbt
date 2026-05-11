@@ -9,7 +9,7 @@ fn validate_lesson_id(id : String) -> Bool {
   let chars = suffix.to_array()
   if chars.length() == 0 { return false }
   for c in chars {
-    if c < '0' || c > '9' { return false }
+    if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) { return false }
   }
   true
 }
