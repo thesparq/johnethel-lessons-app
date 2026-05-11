@@ -78,7 +78,7 @@ struct LessonContent {
   week : Double
   term : String
   active : Bool
-  content : String
+  body : String
 }
 
 ///|
@@ -237,10 +237,127 @@ extern "js" fn js_url_encode(s : String) -> String =
 extern "js" fn js_url_decode(s : String) -> String =
   #|(s) => { try { return decodeURIComponent(s); } catch(e) { return s; } }
 
+#cfg(target="js")
+extern "js" fn js_render_lesson(json_str : String) -> String =
+  #|(jsonStr) => {
+  #|  try {
+  #|    const lesson = JSON.parse(jsonStr);
+  #|    let html = "";
+  #|    
+  #|    // Header info
+  #|    if (lesson.class_level) html += '<p><strong>Class:</strong> ' + lesson.class_level + ' &middot; <strong>Duration:</strong> ' + (lesson.duration_mins||'') + ' mins</p>';
+  #|    
+  #|    // Introduction
+  #|    if (lesson.introduction) html += '<h3>Introduction</h3><p>' + lesson.introduction + '</p>';
+  #|    
+  #|    // Objectives
+  #|    if (lesson.objectives && lesson.objectives.length) {
+  #|      html += '<h3>Learning Objectives</h3><ul>';
+  #|      lesson.objectives.forEach(function(o) { html += '<li>' + (typeof o === 'string' ? o : o.objective) + '</li>'; });
+  #|      html += '</ul>';
+  #|    }
+  #|    
+  #|    // Prior Knowledge
+  #|    if (lesson.prior_knowledge && lesson.prior_knowledge.length && lesson.prior_knowledge[0].length > 0) {
+  #|      html += '<h3>Prior Knowledge</h3><ul>';
+  #|      lesson.prior_knowledge.forEach(function(p) { if (typeof p === 'string' && p.length > 0) html += '<li>' + p + '</li>'; });
+  #|      html += '</ul>';
+  #|    }
+  #|    
+  #|    // Materials
+  #|    if (lesson.materials && lesson.materials.length) {
+  #|      html += '<h3>Materials Needed</h3><ul>';
+  #|      lesson.materials.forEach(function(m) { html += '<li>' + m + '</li>'; });
+  #|      html += '</ul>';
+  #|    }
+  #|    
+  #|    // Content Sections
+  #|    if (lesson.content_sections && lesson.content_sections.length) {
+  #|      html += '<h3>Lesson Content</h3>';
+  #|      lesson.content_sections.forEach(function(s, idx) {
+  #|        html += '<h4>' + (idx+1) + '. ' + s.header + '</h4>';
+  #|        html += '<p>' + s.body + '</p>';
+  #|        if (s.sub_points && s.sub_points.length) {
+  #|          html += '<ul>';
+  #|          s.sub_points.forEach(function(sp) { html += '<li><strong>' + sp.text + '</strong></li>'; });
+  #|          html += '</ul>';
+  #|        }
+  #|      });
+  #|    }
+  #|    
+  #|    // Key Points
+  #|    if (lesson.key_points && lesson.key_points.length) {
+  #|      html += '<h3>Key Points</h3><ul>';
+  #|      lesson.key_points.forEach(function(k) { html += '<li>' + k + '</li>'; });
+  #|      html += '</ul>';
+  #|    }
+  #|    
+  #|    // Success Criteria
+  #|    if (lesson.success_criteria && lesson.success_criteria.length) {
+  #|      html += '<h3>Success Criteria</h3><ul>';
+  #|      lesson.success_criteria.forEach(function(s) { html += '<li>' + s + '</li>'; });
+  #|      html += '</ul>';
+  #|    }
+  #|    
+  #|    // Lesson Steps
+  #|    if (lesson.lesson_steps && lesson.lesson_steps.length) {
+  #|      html += '<h3>Lesson Procedure</h3>';
+  #|      lesson.lesson_steps.forEach(function(s) {
+  #|        html += '<div style="margin-bottom:16px;padding:12px;background:#f8f9fa;border-radius:6px">';
+  #|        html += '<h4 style="margin:0 0 4px 0">Step ' + (s.step_number||s.step) + ': ' + (s.phase||'') + '</h4>';
+  #|        html += '<p><em>Duration:</em> ' + (s.duration_mins||'') + ' min</p>';
+  #|        if (s.pupil_activities) html += '<p><strong>Activity:</strong> ' + s.pupil_activities + '</p>';
+  #|        if (s.teaching_strategy) html += '<p><strong>Strategy:</strong> ' + s.teaching_strategy + '</p>';
+  #|        html += '</div>';
+  #|      });
+  #|    }
+  #|    
+  #|    // MCQ Questions
+  #|    if (lesson.mcq_questions && lesson.mcq_questions.length) {
+  #|      html += '<h3>Revision Questions</h3>';
+  #|      lesson.mcq_questions.forEach(function(q, idx) {
+  #|        html += '<div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #dee2e6;border-radius:6px">';
+  #|        html += '<p><strong>' + (idx+1) + '. ' + q.question + '</strong></p>';
+  #|        var opts = ['A','B','C','D'];
+  #|        opts.forEach(function(o) {
+  #|          var key = 'option_' + o.toLowerCase();
+  #|          if (q[key]) html += '<div style="margin-left:16px">' + o + '. ' + q[key] + '</div>';
+  #|        });
+  #|        html += '</div>';
+  #|      });
+  #|    }
+  #|    
+  #|    // Theoretical Questions
+  #|    if (lesson.theoretical_questions && lesson.theoretical_questions.length) {
+  #|      html += '<h3>Theory Questions</h3>';
+  #|      lesson.theoretical_questions.forEach(function(q, idx) {
+  #|        html += '<div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #dee2e6;border-radius:6px">';
+  #|        html += '<p><strong>' + (idx+1) + '. ' + q.question + '</strong></p>';
+  #|        if (q.parts && q.parts.length) q.parts.forEach(function(p) { html += '<p style="margin-left:16px">' + p + '</p>'; });
+  #|        html += '</div>';
+  #|      });
+  #|    }
+  #|    
+  #|    // Conclusion
+  #|    if (lesson.conclusion) html += '<h3>Conclusion</h3><p>' + lesson.conclusion + '</p>';
+  #|    
+  #|    // Textbook References
+  #|    if (lesson.textbook_references && lesson.textbook_references.length) {
+  #|      html += '<h3>References</h3><ul>';
+  #|      lesson.textbook_references.forEach(function(r) { html += '<li>' + r + '</li>'; });
+  #|      html += '</ul>';
+  #|    }
+  #|    
+  #|    return html;
+  #|  } catch(e) { return '<p>Error rendering lesson</p>'; }
+  #| }
+
 #cfg(not(target="js"))
 fn js_url_encode(s : String) -> String { s }
 #cfg(not(target="js"))
 fn js_url_decode(s : String) -> String { s }
+#cfg(not(target="js"))
+fn js_render_lesson(json_str_ : String) -> String { ignore(json_str_); "" }
 
 #cfg(target="js")
 extern "js" fn js_redirect(url : String) -> Unit =
@@ -524,7 +641,7 @@ fn parse_lesson_obj(obj : Map[String, Json]) -> LessonContent {
         _ => Json::object(obj).stringify()
       }
   }
-  { id, title, subject, week, term, active, content }
+  { id, title, subject, week, term, active, body: Json::object(obj).stringify() }
 }
 
 ///|
@@ -882,7 +999,7 @@ fn view_lesson(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
       children.push(
         @html.div(
           style=["white-space: pre-wrap", "line-height: 1.6"],
-          lesson.content,
+          js_render_lesson(lesson.body),
         ),
       )
       @html.div(children)
