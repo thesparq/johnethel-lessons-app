@@ -233,8 +233,14 @@ extern "js" fn js_get_query_param(name : String) -> String =
 extern "js" fn js_url_encode(s : String) -> String =
   #|(s) => { try { return encodeURIComponent(s); } catch(e) { return s; } }
 
+#cfg(target="js")
+extern "js" fn js_url_decode(s : String) -> String =
+  #|(s) => { try { return decodeURIComponent(s); } catch(e) { return s; } }
+
 #cfg(not(target="js"))
 fn js_url_encode(s : String) -> String { s }
+#cfg(not(target="js"))
+fn js_url_decode(s : String) -> String { s }
 
 #cfg(target="js")
 extern "js" fn js_redirect(url : String) -> Unit =
@@ -806,7 +812,7 @@ fn view_subject(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   @html.div(
     [
       @html.a(href="/", style=["color: #666"], "\u2190 Back to subjects"),
-      @html.h1("Lessons for " + subject_id),
+      @html.h1("Lessons for " + js_url_decode(subject_id)),
       if visible_lessons.length() == 0 {
         let msg = if is_teacher {
           "No lessons found for this subject."
