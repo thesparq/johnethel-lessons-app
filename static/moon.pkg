@@ -11,6 +11,7 @@ import {
   "golemcloud/golem_sdk/interface/golem/agent/host" @agentHost,
   "golemcloud/golem_sdk/filesystem" @fs,
   "golemcloud/golem_sdk/interface/wasi/filesystem/types" @fsTypes,
+  "golemcloud/golem_sdk/interface/wasi/cli/environment" @environment,
 }
 
 options(

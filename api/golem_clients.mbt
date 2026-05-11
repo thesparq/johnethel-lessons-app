@@ -157,7 +157,51 @@ pub fn[T] ApiAgentClient::scoped_get_phantom(
 }
 
 ///|
-pub fn ApiAgentClient::get_subjects(self : ApiAgentClient, auth_header : String) -> String raise @common.AgentError {
+pub fn ApiAgentClient::get_config(self : ApiAgentClient) -> String raise @common.AgentError {
+  let result = 
+    self.client.invoke_and_await("get_config", @rpcTypes.DataValue::Tuple([]))
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn ApiAgentClient::trigger_get_config(self : ApiAgentClient) -> Unit {
+  self.client.invoke("get_config", @rpcTypes.DataValue::Tuple([]))
+}
+
+///|
+pub fn ApiAgentClient::schedule_get_config(
+  self : ApiAgentClient,
+  scheduled_at : @wallClock.Datetime,
+) -> Unit {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "get_config",
+      @rpcTypes.DataValue::Tuple([]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::schedule_cancelable_get_config(
+  self : ApiAgentClient,
+  scheduled_at : @wallClock.Datetime,
+) -> @agentHost.CancellationToken {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "get_config",
+      @rpcTypes.DataValue::Tuple([]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::get_subjects(
+  self : ApiAgentClient,
+  auth_header : String?,
+) -> String raise @common.AgentError {
   let result = self
     .client
     .invoke_and_await(
@@ -171,7 +215,7 @@ pub fn ApiAgentClient::get_subjects(self : ApiAgentClient, auth_header : String)
 ///|
 pub fn ApiAgentClient::trigger_get_subjects(
   self : ApiAgentClient,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -185,7 +229,7 @@ pub fn ApiAgentClient::trigger_get_subjects(
 pub fn ApiAgentClient::schedule_get_subjects(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -200,7 +244,7 @@ pub fn ApiAgentClient::schedule_get_subjects(
 pub fn ApiAgentClient::schedule_cancelable_get_subjects(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
-  auth_header : String,
+  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -215,7 +259,7 @@ pub fn ApiAgentClient::schedule_cancelable_get_subjects(
 pub fn ApiAgentClient::get_lessons(
   self : ApiAgentClient,
   subject_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -234,7 +278,7 @@ pub fn ApiAgentClient::get_lessons(
 pub fn ApiAgentClient::trigger_get_lessons(
   self : ApiAgentClient,
   subject_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -252,7 +296,7 @@ pub fn ApiAgentClient::schedule_get_lessons(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   subject_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -271,7 +315,7 @@ pub fn ApiAgentClient::schedule_cancelable_get_lessons(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   subject_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -289,7 +333,7 @@ pub fn ApiAgentClient::schedule_cancelable_get_lessons(
 pub fn ApiAgentClient::get_lesson(
   self : ApiAgentClient,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -308,7 +352,7 @@ pub fn ApiAgentClient::get_lesson(
 pub fn ApiAgentClient::trigger_get_lesson(
   self : ApiAgentClient,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -326,7 +370,7 @@ pub fn ApiAgentClient::schedule_get_lesson(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -345,7 +389,7 @@ pub fn ApiAgentClient::schedule_cancelable_get_lesson(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -363,7 +407,7 @@ pub fn ApiAgentClient::schedule_cancelable_get_lesson(
 pub fn ApiAgentClient::toggle_lesson(
   self : ApiAgentClient,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -382,7 +426,7 @@ pub fn ApiAgentClient::toggle_lesson(
 pub fn ApiAgentClient::trigger_toggle_lesson(
   self : ApiAgentClient,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -400,7 +444,7 @@ pub fn ApiAgentClient::schedule_toggle_lesson(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -419,7 +463,7 @@ pub fn ApiAgentClient::schedule_cancelable_toggle_lesson(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -438,7 +482,7 @@ pub fn ApiAgentClient::assign_teacher(
   self : ApiAgentClient,
   teacher_id : String,
   subject : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -459,7 +503,7 @@ pub fn ApiAgentClient::trigger_assign_teacher(
   self : ApiAgentClient,
   teacher_id : String,
   subject : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -479,7 +523,7 @@ pub fn ApiAgentClient::schedule_assign_teacher(
   scheduled_at : @wallClock.Datetime,
   teacher_id : String,
   subject : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -500,7 +544,7 @@ pub fn ApiAgentClient::schedule_cancelable_assign_teacher(
   scheduled_at : @wallClock.Datetime,
   teacher_id : String,
   subject : String,
-  auth_header : String,
+  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client

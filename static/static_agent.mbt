@@ -72,12 +72,21 @@ fn mime_type(path : String) -> String {
 
 ///|
 /// Serve static files. Falls back to index.html for SPA routing.
+/// Special handling for /config.js — generated from env vars.
 #derive.endpoint(get="/{*path}")
 pub fn FileServerAgent::download_file(
   self : Self,
   path : String,
 ) -> @types.UnstructuredBinary {
   ignore(self)
+  // Dynamic config.js from env vars
+  if path == "config.js" {
+    let auth_url = get_env_s("AUTHENTIK_URL", "")
+    let client_id = get_env_s("AUTHENTIK_CLIENT_ID", "")
+    let script = "window.__CONFIG__={authentikUrl:\"" + auth_url + "\",clientId:\"" + client_id + "\"};"
+    let bytes = str_to_fixed_bytes(script)
+    return @types.UnstructuredBinary::from_inline(bytes, mime_type="application/javascript")
+  }
   let full_path = if path == "" { "index.html" } else { path }
   let bytes = read_file_bytes(full_path)
   // SPA fallback: if file not found and path looks like a route, serve index.html
@@ -87,6 +96,26 @@ pub fn FileServerAgent::download_file(
     (full_path, bytes)
   }
   @types.UnstructuredBinary::from_inline(final_bytes, mime_type=mime_type(final_path))
+}
+
+///|
+fn get_env_s(name : String, default : String) -> String {
+  let envs = @environment.get_environment()
+  for pair in envs {
+    if pair.0 == name {
+      return pair.1
+    }
+  }
+  default
+}
+
+///|
+fn str_to_fixed_bytes(s : String) -> Bytes {
+  let arr : Array[Byte] = []
+  for i = 0; i < s.length(); i = i + 1 {
+    arr.push(s[i].to_int().to_byte())
+  }
+  Bytes::from_array(arr)
 }
 
 ///|

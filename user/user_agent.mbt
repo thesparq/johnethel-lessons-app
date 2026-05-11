@@ -240,6 +240,36 @@ fn query_result(sql : String) -> Result[Json, String] {
 }
 
 ///|
+/// Validate that a lesson ID matches the expected format (lesson_content:N)
+fn validate_lesson_id(id : String) -> Bool {
+  let prefix = "lesson_content:"
+  if id.length() <= prefix.length() { return false }
+  if id[:prefix.length()] != prefix { return false }
+  let suffix = id[prefix.length():]
+  let chars = suffix.to_array()
+  if chars.length() == 0 { return false }
+  for c in chars {
+    if c < '0' || c > '9' { return false }
+  }
+  true
+}
+
+///|
+fn is_safe_subject_char(c : Char) -> Bool {
+  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '&'
+}
+
+///|
+fn validate_subject_name(name : String) -> Bool {
+  let chars = name.to_array()
+  if chars.length() == 0 { return false }
+  for c in chars {
+    if !is_safe_subject_char(c) { return false }
+  }
+  true
+}
+
+///|
 pub fn UserAgent::get_subjects(self : Self) -> String {
   let cache_key = "subjects"
   match self.cache_get(cache_key) {
@@ -257,14 +287,38 @@ pub fn UserAgent::get_subjects(self : Self) -> String {
 
 ///|
 pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
+  if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
   let cache_key = "list:" + subject
   match self.cache_get(cache_key) {
     Some(cached) => return cached
     None => ()
   }
-  let sql = "SELECT id, topic_title, week, term, subject FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
+  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "' ORDER BY week;"
   let json_str = match query_result(sql) {
-    Ok(result) => result.stringify()
+    Ok(result) => {
+      // Filter inactive lessons for students
+      if self.role == "student" {
+        match result {
+          Json::Array(arr) => {
+            let filtered = arr.filter(fn(item) {
+              match item {
+                Json::Object(obj) => {
+                  match obj.get("active") {
+                    Some(Json::False) => false
+                    _ => true
+                  }
+                }
+                _ => true
+              }
+            })
+            Json::array(filtered).stringify()
+          }
+          _ => result.stringify()
+        }
+      } else {
+        result.stringify()
+      }
+    }
     Err(e) => "{\"error\":\"" + e + "\"}"
   }
   self.cache_set(cache_key, json_str, 600) // 10 min TTL
@@ -273,6 +327,7 @@ pub fn UserAgent::get_lessons(self : Self, subject : String) -> String {
 
 ///|
 pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
+  if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
   let cache_key = "content:" + lesson_id
   match self.cache_get(cache_key) {
     Some(cached) => return cached
@@ -303,31 +358,37 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
 /// Toggle lesson active state (teacher only).
 /// Updates SurrealDB directly. Returns new active value.
 pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
-  // Read current state
-  let select_sql = "SELECT active FROM " + lesson_id + ";"
-  let current = match query_result(select_sql) {
+  if !validate_lesson_id(lesson_id) { return false }
+  // Read current state and subject
+  let select_sql = "SELECT active, subject FROM " + lesson_id + ";"
+  let (current, subject) = match query_result(select_sql) {
     Ok(result) => {
       match result {
         Json::Array(arr) => {
           if arr.length() > 0 {
             match arr[0] {
               Json::Object(obj) => {
-                match obj.get("active") {
+                let active = match obj.get("active") {
                   Some(Json::True) => true
                   Some(Json::False) => false
                   _ => true
                 }
+                let subject = match obj.get("subject") {
+                  Some(Json::String(s)) => s
+                  _ => ""
+                }
+                (active, subject)
               }
-              _ => true
+              _ => (true, "")
             }
           } else {
-            true
+            (true, "")
           }
         }
-        _ => true
+        _ => (true, "")
       }
     }
-    Err(_) => true
+    Err(_) => (true, "")
   }
   // Update to opposite
   let next = !current
@@ -335,8 +396,11 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   let _ = fork_query(update_sql) catch {
     _ => return false
   }
-  // Invalidate cache
+  // Invalidate caches
   self.cache_invalidate("content:" + lesson_id)
+  if subject != "" {
+    self.cache_invalidate("list:" + subject)
+  }
   next
 }
 

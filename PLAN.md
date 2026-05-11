@@ -1,234 +1,122 @@
 # Plan
 
-Build in this exact order. Each step must compile before moving to next.
+## Current Architecture (Post-Security-Scheme)
 
-## Phase 1: Core Refactor (SurrealDB + Per-User Cache)
+```
+Browser → Static Agent (html/js/config.js)
+        → fetch() → Golem API Gateway (JWT validation via Security Scheme)
+                   → ApiAgent (role extraction, routing) → UserAgent (data, cache) → QueryFork → SurrealDB
+                                                         → AdminAgent (assignments)
+```
 
-### Step 1: SurrealDB Schema Update
-- [ ] Add `active: true` to all lesson records in seed data
-- [ ] Update `seed_lessons.surql` with `active` field
-- [ ] Re-seed SurrealDB
-- [ ] Verify: `SELECT active FROM lesson_content:1` returns `true`
+| Component | Agent | Type | Role |
+|-----------|-------|------|------|
+| `api` | **ApiAgent** | Ephemeral | HTTP endpoints, role extraction from OIDC Principal, RPC dispatch |
+| `api` | **ToggleFork** | Ephemeral (deprecated) | Provision compat only, no-op |
+| `auth` | **AuthAgent** | Durable singleton | Unused currently — Authentik userinfo validation (kept for future) |
+| `user` | **UserAgent** | Durable per-user | Lesson data + TTL cache. Owns SurrealDB access. Handles toggles. |
+| `user` | **QueryFork** | Ephemeral | Isolated blocking I/O to SurrealDB |
+| `admin` | **AdminAgent** | Durable singleton | Teacher-subject assignments |
+| `static` | **FileServerAgent** | Ephemeral | Static files (index.html, JS, config.js), SPA catch-all |
 
-### Step 2: Create AuthAgent Component
-- [ ] Create `auth/` directory with `moon.pkg`, `auth_agent.mbt`
-- [ ] Implement `AuthAgent` (durable singleton):
-  - `new()` — empty state
-  - `validate_token(token: String) -> (String, String, String)` — (user_id, role, email)
-  - JWKS fetching from Authentik endpoint
-  - JWKS caching in durable memory
-  - Self-scheduled refresh every hour
-- [ ] Add JWT parsing (header, payload, signature verification)
-- [ ] Add `auth/rpc_helpers.mbt` if needed
-- [ ] Add `auth/moon.pkg` with correct imports
-- [ ] `moon build --target wasm` — must pass
-- [ ] Update `golem.yaml`:
-  - Add `johnethel-lessons-app:auth` component
-  - Add env vars: `AUTHENTIK_URL`, `AUTHENTIK_JWKS_URL`
-- [ ] `golem deploy`
-- [ ] Test: `golem agent invoke "AuthAgent()" "validate_token" '"test|student"'`
+**Auth**: Golem API Security Scheme (`johnethel-auth`) validates Authentik JWTs at the gateway.
+The gateway injects an `OidcPrincipal` into ApiAgent with `sub` (user_id) and `claims` (raw JWT claims JSON containing `groups`). Role is extracted from the `groups` claim. Only users in `students`, `teachers`, or `admin` groups are allowed.
 
-### Step 3: Create QueryFork (Ephemeral DB Worker)
-- [ ] Create `user/query_fork.mbt`
-- [ ] Implement `QueryFork` (ephemeral):
-  - `new(sql: String) -> QueryFork`
-  - `execute() -> String` — makes WASI HTTP to SurrealDB, returns JSON
-- [ ] Move SurrealDB HTTP logic from UserAgent to QueryFork:
-  - `surreal_url_parts()`
-  - `surrealdb_query()` (now in QueryFork)
-  - `str_to_bytes()`, `bytes_to_str()`
-- [ ] Fix UTF-8 encoding (multi-byte character handling)
-- [ ] Add SQL injection validation: `validate_lesson_id()` regex
-- [ ] `moon build --target wasm` — must pass
-
-### Step 4: Refactor UserAgent (HTTP + Cache)
-- [ ] Update `user/user_agent.mbt`:
-  - Add `#derive.mount("/users/{user_id}")`
-  - Add `#derive.mount_cors("*")`
-  - Add HTTP endpoints:
-    - `get_subjects(auth_header: String) -> String`
-    - `get_lessons(auth_header: String, subject: String) -> String`
-    - `get_lesson(auth_header: String, lesson_id: String) -> String`
-    - `toggle_lesson(auth_header: String, lesson_id: String) -> String`
-  - Add cache structure:
-    ```moonbit
-    struct CacheEntry {
-      data: String
-      fetched_at: UInt64
-      ttl_ms: UInt64
-    }
-    ```
-  - Add token cache:
-    ```moonbit
-    struct ValidatedToken {
-      user_id: String
-      role: String
-      validated_at: UInt64
-      ttl_ms: UInt64
-    }
-    ```
-  - Add LRU eviction with max_cache_bytes limit
-  - Add cache helper methods: `check_cache(key)`, `update_cache(key, data)`, `invalidate_cache(key)`
-  - Auth flow: extract token → check token_cache → validate via AuthAgent RPC → verify user_id match
-  - Business logic: cache check → fork QueryFork → update cache → return
-  - Teacher toggle: validate role → fork QueryFork (SELECT + UPDATE) → invalidate cache → return
-  - Lesson ID validation before any query
-- [ ] Update `user/moon.pkg`:
-  - Add `@httpTypes` import for WASI HTTP
-  - Add `@fsTypes` if needed
-- [ ] Remove old `get_env()`, `surrealdb_query()` from UserAgent (moved to QueryFork)
-- [ ] `moon build --target wasm` — must pass
-
-### Step 5: Reduce AdminAgent Scope
-- [ ] Update `admin/admin_agent.mbt`:
-  - Remove `lesson_toggle_state` (moved to SurrealDB)
-  - Keep `subject_teacher` map
-  - Keep `assign_teacher()`, `get_teacher_for_subject()`, `list_teachers()`
-- [ ] `moon build --target wasm` — must pass
-
-### Step 6: Remove ApiAgent Component
-- [ ] Delete `api/api_agent.mbt`
-- [ ] Delete `api/rpc_helpers.mbt`
-- [ ] Delete `api/jwt.mbt`
-- [ ] Keep `api/` directory only if needed for common types (move to `common/` if so)
-- [ ] Update `golem.yaml`:
-  - Remove `johnethel-lessons-app:api` component
-  - Remove ApiAgent from `httpApi` deployments
-  - Add UserAgent to `httpApi` deployments
-
-### Step 7: Update golem.yaml
-- [ ] Add retry policies:
-  ```yaml
-  retryPolicyDefaults:
-    local:
-      http-transient:
-        priority: 10
-        predicate:
-          propIn: { property: "status-code", values: [502, 503, 504] }
-        policy:
-          countBox:
-            maxRetries: 3
-            inner:
-              exponential:
-                baseDelay: "200ms"
-                factor: 2.0
-  ```
-- [ ] Update `httpApi` deployments:
-  ```yaml
-  httpApi:
-    deployments:
-      local:
-        - domain: johnethel-lessons-app.localhost:9006
-          agents:
-            UserAgent: {}
-        - domain: johnethel-lessons-static.localhost:9006
-          agents:
-            FileServerAgent: {}
-  ```
-- [ ] Verify: `golem component manifest-trace`
-- [ ] `golem deploy --yes`
-
-### Step 8: Frontend Updates
-- [ ] Update API base URL if needed (UserAgent mount path changed)
-- [ ] Update endpoint paths:
-  - `/subjects` → `/users/{user_id}/subjects`
-  - `/subjects/{id}/lessons` → `/users/{user_id}/subjects/{id}/lessons`
-  - `/lessons/{id}` → `/users/{user_id}/lessons/{id}`
-  - `/lessons/{id}/toggle` → `/users/{user_id}/lessons/{id}/toggle`
-- [ ] Extract `user_id` from JWT `sub` claim
-- [ ] Include `user_id` in all API call URLs
-- [ ] `cd frontend && moon build --target js`
-- [ ] Copy JS bundle to `ui/dist/`
-
-### Step 9: Integration Testing
-- [ ] Test: `curl /users/anonymous|student/subjects` → returns subject list
-- [ ] Test: `curl /users/anonymous|student/subjects/Mathematics/lessons` → returns lessons
-- [ ] Test: `curl /users/anonymous|student/lessons/lesson_content:1` → returns lesson (active: true)
-- [ ] Test: Login as teacher, toggle lesson off
-- [ ] Test: `curl /users/teacher|teacher/lessons/lesson_content:1` → returns lesson (active: false)
-- [ ] Test: Anonymous user still sees active: true (cache) then active: false (after TTL)
-- [ ] Test: Refresh on `/users/{id}/lessons/{id}` serves index.html (SPA catch-all)
-- [ ] Test: Browser navigation (click links, back button)
+Toggle state lives in SurrealDB (`lesson_content.active`). Cache is per-user with TTL (10min lists, 5min content). Manual invalidation on toggle.
 
 ---
 
-## Phase 2: Authentik Integration
+## Phase 1: Core Refactor — DONE
 
-### Step 10: Authentik Configuration
-- [ ] Create Authentik application: "johnethel-lms"
-- [ ] Create OAuth2/OIDC provider
-- [ ] Configure redirect URI: `http://johnethel-lessons-static.localhost:9006/callback`
-- [ ] Create groups: `students`, `teachers`, `admin`
-- [ ] Create test users and assign to groups
-- [ ] Note JWKS endpoint URL
-
-### Step 11: AuthAgent JWKS Integration
-- [ ] Set `AUTHENTIK_JWKS_URL` in `golem.yaml` env vars
-- [ ] Update AuthAgent to fetch JWKS from Authentik (not hardcoded)
-- [ ] Test: Validate real Authentik JWT
-
-### Step 12: Frontend OAuth2 Flow
-- [ ] Implement login button → redirect to Authentik `/authorize`
-- [ ] Implement callback handler → exchange code for tokens
-- [ ] Store access_token + refresh_token in localStorage
-- [ ] Implement token refresh (before expiry)
-- [ ] Remove simple `user|role` token format (or keep for dev mode only)
-
-### Step 13: End-to-End Auth Test
-- [ ] Student logs in via Authentik → browses subjects → views lesson
-- [ ] Teacher logs in via Authentik → toggles lesson
-- [ ] Admin logs in → assigns teacher to subject
-- [ ] Verify role-based access control works
+- [x] SurrealDB schema: `active` field on all records
+- [x] QueryFork: ephemeral SurrealDB worker
+- [x] UserAgent: per-user TTL cache, student filtering, toggle with cache invalidation
+- [x] AdminAgent: stripped of toggle state, teacher assignments only
+- [x] ApiAgent: HTTP endpoints, role extraction, RPC dispatch
+- [x] Frontend: Rabbita SPA, refresh fix (absolute script path), inactive lesson states
+- [x] golem.yaml: all 5 components, IFS files, frontend build steps, retry policies
+- [x] seed-db.sh: auto-start SurrealDB, create NS/DB, import lessons
+- [x] SQL injection validation: subject name + lesson ID sanitization
+- [x] Retry policies: `http-transient` policy for 502/503/504 (3 retries, exponential backoff)
 
 ---
 
-## Phase 3: Optimizations (Post-MVP)
+## Phase 2: Authentik Integration — DONE
+
+- [x] Authentik application + provider created on `auth.johnethel.school`
+- [x] Golem API Security Scheme (`johnethel-auth`) configured for Authentik
+- [x] `#derive.mount_auth(true)` on ApiAgent — gateway validates all JWTs
+- [x] OIDC Principal → user_id (sub) + role (groups claim) extraction
+- [x] Group enforcement: only `students`, `teachers`, `admin` allowed
+- [x] `/config` endpoint public (exempt from auth via `#derive.endpoint_auth(false)`)
+- [x] Frontend OAuth2 login flow with PKCE
+- [x] Dynamic `config.js` served from env vars (Authentik URL + client_id)
+- [x] All credentials as env vars in golem.yaml
+- [x] Env vars for Authentik config on both `api` and `static` components
+
+### Authentik Admin Setup Required
+
+1. Create groups: `students`, `teachers`, `admin` in Authentik
+2. Create test users and assign to groups
+3. Configure scope mapping to include `groups` claim in JWT
+4. Client ID: `rhca5hupVGwRWh2EVf7dkw3WXXFcseJMcsdQYVH9` (configured in golem.yaml env vars)
+
+---
+
+## Phase 3: Polish & Features — TODO
 
 ### Step 14: Performance
-- [ ] Add token cache in UserAgent (1 min TTL)
-- [ ] Add LRU cache eviction with max size
-- [ ] Add cache metrics (hit rate, size)
-- [ ] Tune TTL values based on usage patterns
+- [ ] LRU cache eviction with max size
+- [ ] Cache metrics (hit rate, size)
 
 ### Step 15: Reliability
-- [ ] Add structured logging (`@logging` module)
-- [ ] Add error tracking / alerting
-- [ ] Add graceful degradation (serve stale cache on DB failure)
-- [ ] Test crash recovery (`golem agent simulate-crash`)
+- [ ] Structured logging (`@logging`)
+- [ ] Graceful degradation (serve stale cache on DB failure)
+- [ ] Test crash recovery
 
 ### Step 16: Features
 - [ ] Assessments: new SurrealDB table + UserAgent endpoints
-- [ ] Attendance: UserAgent `mark_attendance()`
-- [ ] Notifications: `schedule_future_call()` for reminders
-- [ ] Bulk operations: `@api.fork()` for parallel lesson updates
-- [ ] Parent portal: new `ParentAgent` component
+- [ ] Attendance tracking
+- [ ] Bulk lesson operations
+- [ ] Parent portal agent
 
 ---
 
 ## Known Issues & Workarounds
 
 ### 64KB IFS File Read Limit
-- **Status**: Active workaround
-- **Code**: `static/static_agent.mbt` — `read_file_bytes()` with 32KB chunks
-- **Future**: Replace with `@fs.read_bytes()` when Golem SDK fix lands (PR #3333)
+- **Status**: Active workaround (32KB chunked reads in FileServerAgent)
+- **Fix**: Replace with `@fs.read_bytes()` when Golem SDK fixes land
 
-### WASI HTTP Blocking
-- **Status**: Mitigated by QueryFork pattern
-- **Issue**: No built-in RPC timeout
-- **Workaround**: Ephemeral QueryFork isolates blocking I/O
+### Server State Corruption
+- **Issue**: Local dev server hangs on outgoing HTTP after extended runtime
+- **Fix**: `pkill -f "golem server run"` then `golem server run --clean`
 
-### String Encoding (UTF-16 → UTF-8)
-- **Status**: Needs fix
-- **Issue**: `str_to_bytes` may corrupt multi-byte characters
-- **Fix**: Use proper UTF-8 encoder (check MoonBit SDK)
+### AuthAgent RPC Panics
+- **Issue**: Cross-component RPC to AuthAgent panics (traps) on invocation
+- **Status**: AuthAgent not used — auth handled by Golem API Security Scheme
+- **Fix**: Keep AuthAgent for potential future use (custom claim validation, /userinfo checks)
+
+### ryota0624/oauth2 Package
+- **Issue**: Package is native-only (`"preferred-target": "native"`), incompatible with JS frontend
+- **Status**: Not used. PKCE implemented manually via browser Crypto API in JS FFI
 
 ---
 
-## Done When
+## Delivery Checklist
 
-- [ ] Student can log in via Authentik, browse subjects, open a lesson
-- [ ] Teacher can log in and toggle a lesson off/on
-- [ ] Anonymous browsing works (no login required for read endpoints)
-- [ ] Cache provides < 5ms response for cached data
-- [ ] No timeouts on lesson detail pages
-- [ ] All 12 seeded lessons display correctly with full content
+- [x] Students browse subjects and lessons
+- [x] Teachers see all lessons with active/inactive state
+- [x] Students don't see inactive lessons
+- [x] Teachers toggle lessons
+- [x] Invalid tokens rejected
+- [x] Refresh/reload preserves route state
+- [x] SQL injection validation
+- [x] Retry policies for SurrealDB HTTP
+- [x] Authentik OIDC integration with PKCE
+- [x] Golem API Security Scheme (gateway-level JWT validation)
+- [x] Group-based access control (students/teachers/admin only)
+- [x] Env vars for all credentials
+- [ ] Authentik group scope mapping + test users
+- [ ] LRU cache eviction
+- [ ] Structured logging

@@ -6,7 +6,7 @@ Lesson content viewer for Johnethel School. Students browse subjects and lessons
 - **Language**: MoonBit (all components)
 - **Runtime**: Golem Cloud v1.5.0
 - **Frontend**: Rabbita (MoonBit → JS, TEA architecture)
-- **Auth**: Authentik OIDC (existing instance)
+- **Auth**: Authentik OIDC via Golem API Security Scheme (gateway-level JWT validation)
 - **Database**: SurrealDB (existing, populated, read-only for lessons)
 - **Toggle state**: Lives in SurrealDB (`lesson_content.active`)
 - **Cache**: Per-user TTL cache in UserAgent (5-10 min)
@@ -15,153 +15,95 @@ Lesson content viewer for Johnethel School. Students browse subjects and lessons
 
 ### Build & Deploy
 ```bash
-moon build                           # Build all WASM components
-moon check --target wasm             # Type-check WASM target
-golem deploy                         # Deploy to Golem
-cd frontend && moon build --target js   # Build Rabbita frontend
+moon build --target wasm               # Build all WASM components
+cd frontend && moon build --target js  # Build Rabbita frontend
+golem deploy -Y                        # Deploy to Golem
 ```
 
 ### Database Seeding
 ```bash
-./scripts/seed-db.sh                 # Seed SurrealDB with sample lessons
+./scripts/seed-db.sh                   # Seed SurrealDB with sample lessons
 ```
 
-The seeder will:
-1. Check if SurrealDB is running (starts it if not)
-2. Create namespace `johnethel` and database `lessons`
-3. Clear existing `lesson_content` data
-4. Import all 12 sample lessons from `seed_lessons.surql`
-
-**Environment variables:**
-- `SURREAL_BIN` — path to surreal binary (default: `~/.surrealdb/surreal`)
-- `SURREAL_URL` — SurrealDB endpoint (default: `http://127.0.0.1:8000`)
-- `SURREAL_USER` / `SURREAL_PASS` — auth credentials (default: `root` / `root`)
-- `SURREAL_NS` / `SURREAL_DB` — namespace and database (default: `johnethel` / `lessons`)
-
-**Manual seeding (if script fails):**
+### Server Management
 ```bash
-# Start SurrealDB
-surreal start --user root --pass root --bind 127.0.0.1:8000
+golem server run --clean               # Start server with clean state
+pkill -f "golem server run"            # Stop server
+golem update-agents --update-mode automatic -Y <component>  # Update agents to latest revision
+```
 
-# In another terminal
-surreal import \
-  --endpoint http://127.0.0.1:8000 \
-  --username root --password root \
-  --namespace johnethel --database lessons \
-  ./seed_lessons.surql
+### Auth Management
+```bash
+golem api security-scheme get johnethel-auth    # View security scheme
+golem retry-policy list                         # List retry policies
 ```
 
 ## Rules
-- Always use Result for error handling — never unwrap, never panic
-- JWT validation happens in AuthAgent only — never trust userId from request body
-- Toggle state lives in SurrealDB (`lesson_content.active`) — never in agent memory
-- Student responses never include teacher-facing fields
-- Blocking I/O (SurrealDB) must go through ephemeral QueryFork — never block durable agents
-- Never manually edit generated Golem files
+- **Auth**: JWT validated by Golem API Gateway (security scheme). Agent extracts role from Principal.claims.groups.
+- **Group enforcement**: Only `students`, `teachers`, `admin` Authentik groups are allowed.
+- **Toggle state**: Lives in SurrealDB (`lesson_content.active`) — never in agent memory.
+- **Student responses**: Never include teacher-facing fields (answers).
+- **Blocking I/O**: SurrealDB calls go through ephemeral QueryFork — never block durable agents.
+- **Never edit generated files**: `golem_agents.mbt`, `golem_clients.mbt`, `golem_reexports.mbt`, `golem_derive.mbt`.
 
 ## Docs
-- docs/architecture.md — agent roles, flows, SurrealDB schema
-- PLAN.md — build order and known issues
+- docs/architecture.md — Full architecture, request flows, component details
+- PLAN.md — Build order, delivery checklist, known issues
 
 ## Known Issues & Solutions
 
 ### 64KB IFS File Read Limit (Active)
-**Problem**: `@fs.read_bytes()` truncates files to exactly 65,536 bytes per call.
+**Problem**: `@fs.read_bytes()` truncates files to 65,536 bytes per call.
+**Solution**: Chunked reads (32KB) in `static/static_agent.mbt`. Loop until EOF.
 
-**Root Cause**: Golem 1.5.0's WASI `descriptor.read()` runtime caps each call at 64KB. The SDK's `read_bytes()` helper makes a single call and returns whatever it gets.
+### Server State Corruption
+**Problem**: Local dev server hangs on outgoing HTTP after ~1 day.
+**Fix**: `pkill -f "golem server run" && golem server run --clean`, then redeploy.
 
-**Impact**: Any file >64KB served through IFS (e.g., `johnethel-frontend.js` at 623KB) will be truncated.
+### AuthAgent RPC Panics
+**Problem**: Cross-component RPC to AuthAgent traps instead of raising AgentError.
+**Status**: AuthAgent not used. Auth handled by Golem API Security Scheme.
 
-**Solution** (in `static/static_agent.mbt`):
-```moonbit
-fn read_file_bytes(path : String) -> Bytes {
-  // WORKAROUND: Required because read_bytes is capped at 64KB per call.
-  // TODO: Replace with @fs.read_bytes(root, path).unwrap() once SDK fix lands.
-  let fd = root.open_at(...)
-  let s = fd.stat().unwrap()
-  let chunk_size : UInt64 = 32768
-  // ... loop until EOF ...
-}
-```
+### JS Bundle Not Refreshing
+**Problem**: `golem deploy -Y` may skip JS rebuild if `frontend/_build/` is cached.
+**Fix**: `rm -rf frontend/_build golem-temp _build/wasm && golem deploy -Y`.
 
-**Related**: https://github.com/golemcloud/golem/pull/3333 ("Skill tweaks and MoonBit SDK fixes")
-
-### IFS File Mounting (RESOLVED)
-**Problem**: Files configured in `golem.yaml` `files:` section returned `NOT_PERMITTED` or `NO_ENTRY`.
-
-**Root Cause**: 
-1. Using `/web/` prefix in targetPath (e.g., `/web/index.html`) — IFS files are mounted at the preopened root `/`
-2. Using `@fs.get_root_dir()` with incorrect path expectations
-3. After `golem server clean` without `--clean` flag, the server data directory was corrupted
-
-**Fix**:
-```yaml
-# golem.yaml — correct IFS configuration
-files:
-  - sourcePath: ./ui/dist/index.html    # relative to golem.yaml
-    targetPath: /index.html              # mounted at root /
-    permissions: read-only
-```
-
-**Lesson**: Always use `./relative/path` for sourcePath and `/filename` for targetPath. Never use subdirectories like `/web/` unless the entire directory is mounted.
-
-### moonbitlang/x/fs Incompatibility (RESOLVED)
-**Problem**: `moonbitlang/x/fs` package from docs failed to build.
-
-**Root Cause**: `moonbitlang/x/fs` requires `__moonbit_fs_unstable` host functions that Golem's WASM runtime does not implement.
-
-**Fix**: Use Golem SDK's `@fs` module (`golemcloud/golem_sdk/filesystem`) instead.
-
-### Server Clean Procedure (LEARNED)
-**Wrong**: `golem server clean` + manual `rm -rf ~/.local/share/golem/*`
-**Correct**: `golem server run --clean` (stops, cleans, and restarts in one command)
-
-### Outgoing HTTP Hang in Local Server (RESOLVED)
-**Problem**: Agents making outgoing WASI HTTP requests (e.g., `surrealdb_query()`) hang indefinitely at `BEGIN REMOTE WRITE` in the oplog. Both durable and ephemeral agents affected.
-
-**Root Cause**: Golem local dev server entered a corrupted state after extended runtime (~1 day). The worker executor could not complete remote write operations for outgoing HTTP interception.
-
-**Symptoms**:
-- `golem agent invoke` times out after starting `INVOKE`
-- Oplog stops at `BEGIN REMOTE WRITE` entry
-- Direct `curl` to target URL works fine (not a network issue)
-- Simple ephemeral agents (no HTTP) work fine
-
-**Fix**: Stop the server and restart with clean state:
-```bash
-# Kill existing server
-pkill -f "golem server run"
-
-# Restart with clean
-golem server run --clean
-# Or in background:
-nohup golem server run --clean > /tmp/golem-server.log 2>&1 &
-```
-
-**After clean restart**: redeploy all components (`golem deploy -Y`) and recreate any seeded data.
+### Retry Policies — CLI Only
+**Problem**: Retry policies defined in golem.yaml don't trigger deployment.
+**Solution**: Create via CLI: `golem retry-policy create http-transient ...`
 
 ## Architecture
 
-### Components (4)
-- **api** — HTTP entry point, JWT validation, routes to backend agents
-- **user** — Durable per-user agent, SurrealDB queries, toggle state
-- **admin** — Durable singleton, teacher assignment
-- **static** — Ephemeral file server, serves frontend assets via IFS
+### Components (5)
+- **api** — ApiAgent (ephemeral HTTP router, role extraction from OIDC Principal)
+- **user** — UserAgent (durable per-user, cache + SurrealDB) + QueryFork (ephemeral DB worker)
+- **auth** — AuthAgent (durable singleton, unused — auth handled by gateway)
+- **admin** — AdminAgent (durable singleton, teacher-subject assignments)
+- **static** — FileServerAgent (ephemeral, static files + SPA catch-all + dynamic config.js)
 
 ### HTTP Endpoints
 - API: `http://johnethel-lessons-app.localhost:9006`
-  - GET /subjects
-  - GET /subjects/:id/lessons
-  - GET /lessons/:id
-  - POST /lessons/:id/toggle
-  - POST /admin/assign
+  - GET /config (public, no auth)
+  - GET /subjects (auth required)
+  - GET /subjects/:id/lessons (auth required)
+  - GET /lessons/:id (auth required)
+  - POST /lessons/:id/toggle (teacher/admin)
+  - POST /admin/assign (admin)
 - Static: `http://johnethel-lessons-static.localhost:9006`
-  - GET / → index.html
-  - GET /johnethel-frontend.js → JS bundle
+  - GET /config.js → dynamic Authentik config from env vars
+  - GET / → index.html (SPA catch-all)
+  - GET /johnethel-frontend.js → JS bundle (~640KB)
+
+### Env Vars (in golem.yaml)
+- `api`: AUTHENTIK_URL, AUTHENTIK_CLIENT_ID
+- `auth`: AUTHENTIK_USERINFO_URL
+- `user`: SURREALDB_URL, SURREALDB_NS, SURREALDB_DB, SURREALDB_TOKEN
+- `static`: AUTHENTIK_URL, AUTHENTIK_CLIENT_ID
 
 ## Git Repository
 - https://github.com/thesparq/johnethel-lessons-app
-- PR #1: Static file serving component with 64KB workaround
+- Branch: `main`
+- Current deployment revision: 13
 
 <!-- golem-managed:guide:moonbit:start -->
 <!-- Golem manages this section. Do not edit manually. -->
@@ -232,6 +174,7 @@ This project includes coding-agent skills in `.agents/skills/`. Load a skill whe
 | `golem-undo-agent-state` | Reverting agent state by undoing operations |
 | `golem-interrupt-resume-agent` | Interrupting and resuming a Golem agent |
 | `golem-test-crash-recovery` | Simulating a crash on an agent for testing crash recovery |
+| `golem-integration-test-setup` | Setting up a dedicated Golem environment for integration testing — isolated local server, test environment in golem.yaml, dynamic port discovery, and non-interactive deploys |
 | `golem-cancel-queued-invocation` | Canceling a pending (queued) invocation on an agent |
 | `golem-delete-agent` | Deleting an agent instance |
 | `golem-interactive-repl-moonbit` | Using the Golem REPL for interactive testing and scripting of agents |
@@ -254,6 +197,20 @@ Key concepts:
 - Invocations are processed **sequentially in a single thread** — no concurrency within a single agent, no need for locks
 - Agents can **spawn other agents** and communicate with them via **RPC** (see Agent-to-Agent Communication)
 - An agent is created implicitly on first invocation — no separate creation step needed
+- **Async handles cannot outlive invocations** — every WASI `pollable` or `future-*` resource (e.g. those returned by `@http.handle`) must be subscribed to / `get()`-ed within the same invocation; do not store unresolved pollables or futures in agent state to consume them from a later invocation
+
+## Durability & Automatic Retries
+
+Golem **automatically retries** failed operations using durable execution. **Do not add manual retry loops, `match` + retry patterns, or backoff utilities in agent code** — let operations fail and Golem will retry them. A built-in default policy (3 retries, exponential backoff with jitter, clamped to [100ms, 1s]) applies when no user-defined policy matches.
+
+The following are retried transparently:
+
+- **HTTP requests** to external services (via `wasi:http` and friends)
+- **RPC calls** between agents
+- **Database / storage calls** — `golem:rdbms/postgres`, `golem:rdbms/mysql`, `golem:rdbms/ignite2`, `wasi:blobstore`, `wasi:keyvalue`
+- **Panics and unhandled errors** (raised via `raise` or propagated with `!`) escaping an agent method — the worker is restarted and the invocation is replayed from the oplog, with all previously-recorded side effects skipped
+
+Only customize when the *strategy* needs to change (different backoff, give-up conditions, per-status-code policies). For that, see the `golem-retry-policies-moonbit` skill.
 
 ## Project Structure
 

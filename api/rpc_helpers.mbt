@@ -1,5 +1,5 @@
 ///| rpc_helpers.mbt — thin RPC wrappers for cross-component calls
-/// UserAgent is per-user. AdminAgent is the durable singleton (global toggles).
+/// UserAgent is per-user. AdminAgent is the durable singleton.
 
 /// Call UserAgent::get_subjects
 fn user_get_subjects(user_id : String, role : String) -> String raise @common.AgentError {

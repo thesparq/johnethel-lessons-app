@@ -10,9 +10,10 @@ import {
   "golemcloud/golem_sdk/rpc" @rpc,
   "golemcloud/golem_sdk/interface/golem/core/types" @rpcTypes,
   "golemcloud/golem_sdk/interface/wasi/clocks/wallClock" @wallClock,
-  "golemcloud/golem_sdk/interface/golem/agent/host" @agentHost,
-  "moonbitlang/core/encoding/base64" @base64,
+  "golemcloud/golem_sdk/interface/wasi/cli/environment" @environment,
   "moonbitlang/core/json" @json,
+  "moonbitlang/core/encoding/base64" @base64,
+  "golemcloud/golem_sdk/interface/golem/agent/host" @agentHost,
 }
 
 options(

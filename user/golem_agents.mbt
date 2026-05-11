@@ -2,6 +2,69 @@
 
 fn init{
   @agents.register_agent({
+    name: "QueryFork",
+    agent_type: {
+      type_name: "QueryFork",
+      description: "QueryFork — ephemeral SurrealDB worker.  Makes blocking HTTP requests to SurrealDB, returns JSON string, then dies. Isolates blocking I/O from durable UserAgent.",
+      source_language: "moonbit",
+      constructor_: {
+        name: Some("new"),
+        description: "Creates a new QueryFork",
+        prompt_hint: None,
+        input_schema: @rpcTypes.DataSchema::Tuple([
+          (
+            "sql",
+            @schema.schema_of_tag(
+              (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+            ),
+          ),
+        ]),
+      },
+      methods: [
+        {
+          name: "execute",
+          description: "Execute the SQL query against SurrealDB and return the JSON result string.",
+          http_endpoint: [],
+          prompt_hint: None,
+          input_schema: @rpcTypes.DataSchema::Tuple([]),
+          output_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "result",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
+        },
+      ],
+      dependencies: [],
+      mode: @common.AgentMode::EPHEMERAL,
+      http_mount: None,
+      snapshotting: @common.Snapshotting::Disabled,
+      config: [],
+    },
+    construct: fn(input, principal) {
+      try {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 1 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 1 elements, got " + elements.length().to_string(),
+          )
+        }
+        let sql :String = @schema.from_element_value_as(elements[0])
+        let agent = QueryFork::new(sql)
+        let constructed = @agents.ConstructedAgent::{
+          raw: agent,
+          snapshottable: None,
+          snapshot_format: None,
+        }
+        Ok(constructed)
+      } catch{
+        e => Err(e)
+      }
+    },
+  })
+  @agents.register_agent({
     name: "UserAgent",
     agent_type: {
       type_name: "UserAgent",
@@ -137,69 +200,32 @@ fn init{
       }
     },
   })
-  @agents.register_agent({
-    name: "QueryFork",
-    agent_type: {
-      type_name: "QueryFork",
-      description: "QueryFork — ephemeral SurrealDB worker.  Makes blocking HTTP requests to SurrealDB, returns JSON string, then dies. Isolates blocking I/O from durable UserAgent.",
-      source_language: "moonbit",
-      constructor_: {
-        name: Some("new"),
-        description: "Creates a new QueryFork",
-        prompt_hint: None,
-        input_schema: @rpcTypes.DataSchema::Tuple([
-          (
-            "sql",
-            @schema.schema_of_tag(
-              (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-            ),
-          ),
-        ]),
-      },
-      methods: [
-        {
-          name: "execute",
-          description: "Execute the SQL query against SurrealDB and return the JSON result string.",
-          http_endpoint: [],
-          prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([]),
-          output_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "result",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-          ]),
-        },
-      ],
-      dependencies: [],
-      mode: @common.AgentMode::EPHEMERAL,
-      http_mount: None,
-      snapshotting: @common.Snapshotting::Disabled,
-      config: [],
-    },
-    construct: fn(input, principal) {
-      try {
+}
+
+///|
+impl @agents.RawAgent for QueryFork with invoke(
+  self,
+  method_name,
+  input,
+  principal,
+) {
+  try {
+    match method_name {
+      "execute" => {
         let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 1 else {
+        guard elements.length() == 0 else {
           raise  @common.AgentError::InvalidInput(
-            "Expected 1 elements, got " + elements.length().to_string(),
+            "Expected 0 elements, got " + elements.length().to_string(),
           )
         }
-        let sql :String = @schema.from_element_value_as(elements[0])
-        let agent = QueryFork::new(sql)
-        let constructed = @agents.ConstructedAgent::{
-          raw: agent,
-          snapshottable: None,
-          snapshot_format: None,
-        }
-        Ok(constructed)
-      } catch{
-        e => Err(e)
+        let result = self.execute()
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
-    },
-  })
+      other => Err(@common.AgentError::InvalidMethod(other))
+    }
+  } catch{
+    e => Err(e)
+  }
 }
 
 ///|
@@ -252,32 +278,6 @@ impl @agents.RawAgent for UserAgent with invoke(
         }
         let lesson_id :String = @schema.from_element_value_as(elements[0])
         let result = self.toggle_lesson(lesson_id)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      other => Err(@common.AgentError::InvalidMethod(other))
-    }
-  } catch{
-    e => Err(e)
-  }
-}
-
-///|
-impl @agents.RawAgent for QueryFork with invoke(
-  self,
-  method_name,
-  input,
-  principal,
-) {
-  try {
-    match method_name {
-      "execute" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 0 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 0 elements, got " + elements.length().to_string(),
-          )
-        }
-        let result = self.execute()
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       other => Err(@common.AgentError::InvalidMethod(other))

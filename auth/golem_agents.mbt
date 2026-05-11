@@ -5,7 +5,7 @@ fn init{
     name: "AuthAgent",
     agent_type: {
       type_name: "AuthAgent",
-      description: "AuthAgent — durable singleton for token validation.  Validates dev tokens (user_id|role) and eventually JWT from Authentik.",
+      description: "AuthAgent — durable singleton for token validation.  Validates dev tokens (user_id|role) and Authentik JWT via userinfo endpoint.",
       source_language: "moonbit",
       constructor_: {
         name: Some("new"),
@@ -16,7 +16,7 @@ fn init{
       methods: [
         {
           name: "validate_token",
-          description: "Validate a token and return (user_id, role, email).  Supports dev format: user_id|role (e.g. alice|student, teacher1|teacher) Never fails — returns defaults on any error.",
+          description: "Validate a token and return (user_id, role, email).  Tries Authentik userinfo first, falls back to dev tokens.",
           http_endpoint: [],
           prompt_hint: None,
           input_schema: @rpcTypes.DataSchema::Tuple([

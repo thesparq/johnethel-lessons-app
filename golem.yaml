@@ -17,6 +17,20 @@ environments:
   cloud:
     server: cloud
     componentPresets: release
+
+retryPolicyDefaults:
+  local:
+    http-transient:
+      priority: 10
+      predicate:
+        propIn: { property: "status-code", values: [502, 503, 504] }
+      policy:
+        countBox:
+          maxRetries: 3
+          inner:
+            exponential:
+              baseDelay: { secs: 0, nanos: 200000000 }
+              factor: 2.0
 components:
   johnethel-lessons-app:auth:
     dir: auth
@@ -36,6 +50,7 @@ components:
         dir: ..
     componentWasm: ../_build/wasm/debug/auth.agent.wasm
     env:
+      AUTHENTIK_USERINFO_URL: "https://auth.johnethel.school/application/o/userinfo/"
 
   johnethel-lessons-app:api:
     dir: api
@@ -55,6 +70,8 @@ components:
         dir: ..
     componentWasm: ../_build/wasm/debug/api.agent.wasm
     env:
+      AUTHENTIK_URL: "https://auth.johnethel.school"
+      AUTHENTIK_CLIENT_ID: "rhca5hupVGwRWh2EVf7dkw3WXXFcseJMcsdQYVH9"
 
   johnethel-lessons-app:user:
     dir: user
@@ -103,6 +120,10 @@ components:
     templates: moonbit
     buildMergeMode: replace
     build:
+      - command: moon build --target js
+        dir: ../frontend
+      - command: sh -c "cp frontend/_build/js/debug/build/johnethel-frontend.js ui/dist/johnethel-frontend.js"
+        dir: ..
       - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- reexports .mooncakes/golemcloud/golem_sdk static
         dir: ..
       - command: moon run .mooncakes/golemcloud/golem_sdk_tools/cmd -- agents static
@@ -123,13 +144,16 @@ components:
         targetPath: /johnethel-frontend.js
         permissions: read-only
     env:
+      AUTHENTIK_URL: "https://auth.johnethel.school"
+      AUTHENTIK_CLIENT_ID: "rhca5hupVGwRWh2EVf7dkw3WXXFcseJMcsdQYVH9"
 
 httpApi:
   deployments:
     local:
       - domain: johnethel-lessons-app.localhost:9006
         agents:
-          ApiAgent: {}
+          ApiAgent:
+            securityScheme: johnethel-auth
       - domain: johnethel-lessons-static.localhost:9006
         agents:
           FileServerAgent: {}

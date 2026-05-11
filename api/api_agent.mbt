@@ -17,129 +17,212 @@ pub fn ToggleFork::execute(self : Self) -> Bool {
 }
 
 ///|
-/// API entry point agent — ephemeral, one per request
+/// API entry point agent — ephemeral, one per request.
+/// Auth validated by Golem gateway via security scheme (Authentik).
+/// Uses per-endpoint auth to allow CORS preflight through.
 #derive.agent("ephemeral")
 #derive.mount("/")
 #derive.mount_cors("*")
-struct ApiAgent {}
-
-///|
-fn ApiAgent::new() -> ApiAgent {
-  ApiAgent::{}
+struct ApiAgent {
+  principal : @common.Principal
 }
 
 ///|
-/// Extract Bearer token from Authorization header (or use raw value)
-fn extract_token(auth_header : String) -> String {
-  let prefix = "Bearer "
-  if auth_header.has_prefix(prefix) {
-    auth_header[prefix.length():].to_owned()
-  } else {
-    auth_header
+fn ApiAgent::new(principal : @common.Principal) -> ApiAgent {
+  { principal, }
+}
+
+///|
+fn auth_user(auth_header : String, p : @common.Principal) -> (String, String) {
+  match p {
+    @common.Principal::Oidc(oidc) => validate_principal_claims(oidc, auth_header)
+    @common.Principal::Anonymous | _ => auth_manual(auth_header)
   }
 }
 
 ///|
-/// Parse auth header and return (user_id, role). Never fails.
-fn auth_user(auth_header : String) -> (String, String) {
-  let token = extract_token(auth_header)
-  parse_auth(token)
+fn validate_principal_claims(oidc : @common.OidcPrincipal, auth_header : String) -> (String, String) {
+  let json = @json.parse(oidc.claims) catch { _ => return auth_manual(auth_header) }
+  match json {
+    Json::Object(obj) => match obj.get("groups") {
+      Some(Json::Array(groups)) => {
+        let mut found = false
+        let mut r = "student"
+        for g in groups {
+          match g {
+            Json::String("teachers") => { r = "teacher"; found = true; break }
+            Json::String("admin") => { r = "admin"; found = true; break }
+            Json::String("students") => { r = "student"; found = true; break }
+            _ => ()
+          }
+        }
+        if found { (oidc.sub, r) } else { auth_manual(auth_header) }
+      }
+      _ => auth_manual(auth_header)
+    }
+    _ => auth_manual(auth_header)
+  }
 }
 
 ///|
-/// List all subjects — open to everyone
+fn auth_manual(auth_header : String) -> (String, String) {
+  if auth_header == "" { return ("anonymous", "student") }
+  let token = auth_header
+  let prefix = "Bearer "
+  let token = if token.has_prefix(prefix) { token[prefix.length():].to_owned() } else { token }
+  if token.contains(".") { return parse_jwt(token) }
+  ("anonymous", "student")
+}
+
+///|
+fn fix_base64url(s : String) -> String {
+  let chars = s.to_array()
+  let mut r = ""
+  for i = 0; i < chars.length(); i = i + 1 {
+    let ch = chars[i]
+    if ch == '-' { r = r + "+" } else if ch == '_' { r = r + "/" } else { r = r + ch.to_string() }
+  }
+  let pad = (4 - r.length() % 4) % 4
+  for _i = 0; _i < pad; _i = _i + 1 { r = r + "=" }
+  r
+}
+
+///|
+fn bytes_to_str_simple(b : Bytes) -> String {
+  let mut s = ""
+  for i = 0; i < b.length(); i = i + 1 {
+    s = s + b[i].to_int().unsafe_to_char().to_string()
+  }
+  s
+}
+
+///|
+fn parse_jwt(token : String) -> (String, String) {
+  let parts = token.split(".").to_array()
+  if parts.length() < 2 { return ("anonymous", "student") }
+  let b64 = fix_base64url(parts[1].to_owned())
+  let bytes = @base64.decode(b64) catch { _ => return ("anonymous", "student") }
+  let decoded = bytes_to_str_simple(bytes)
+  let json = @json.parse(decoded) catch { _ => return ("anonymous", "student") }
+  match json {
+    Json::Object(obj) => {
+      let user_id = match obj.get("sub") { Some(Json::String(s)) => s; _ => "" }
+      let role = match obj.get("groups") {
+        Some(Json::Array(groups)) => {
+          let mut found = false
+          let mut r = "student"
+          for g in groups {
+            match g {
+              Json::String("teachers") => { r = "teacher"; found = true; break }
+              Json::String("admin") => { r = "admin"; found = true; break }
+              Json::String("students") => { r = "student"; found = true; break }
+              _ => ()
+            }
+          }
+          if found { r } else { "anonymous" }
+        }
+        _ => "student"
+      }
+      if user_id != "" && role != "anonymous" { (user_id, role) } else { ("anonymous", "student") }
+    }
+    _ => ("anonymous", "student")
+  }
+}
+
+///|
+fn auth_error_json(msg : String) -> String { "{\"error\":\"" + msg + "\"}" }
+
+///|
+fn get_env_safe(name : String, default : String) -> String {
+  let envs = @environment.get_environment()
+  for pair in envs {
+    if pair.0 == name { return pair.1 }
+  }
+  default
+}
+
+///|
+/// Public: return Authentik config for frontend.
+#derive.endpoint(get="/config")
+#derive.endpoint_auth(false)
+pub fn ApiAgent::get_config(self : Self) -> String {
+  let _ = self
+  let url = get_env_safe("AUTHENTIK_URL", "")
+  let client_id = get_env_safe("AUTHENTIK_CLIENT_ID", "")
+  "{\"authentikUrl\":\"" + url + "\",\"clientId\":\"" + client_id + "\"}"
+}
+
+///|
+/// List all subjects.
 #derive.endpoint(get="/subjects")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::get_subjects(self : Self, auth_header : String) -> String raise @common.AgentError {
+pub fn ApiAgent::get_subjects(self : Self, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
-  let (user_id, role) = auth_user(auth_header)
+  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   user_get_subjects(user_id, role)
 }
 
 ///|
-/// List lessons for a subject — open to everyone
+/// List lessons for a subject.
 #derive.endpoint(get="/subjects/{subject_id}/lessons")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::get_lessons(
-  self : Self,
-  subject_id : String,
-  auth_header : String
-) -> String raise @common.AgentError {
+pub fn ApiAgent::get_lessons(self : Self, subject_id : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
-  let (user_id, role) = auth_user(auth_header)
+  if !validate_subject_name(subject_id) { return auth_error_json("Invalid subject name") }
+  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   user_get_lessons(user_id, role, subject_id)
 }
 
 ///|
-/// Get lesson content — open to everyone
+/// Get full lesson content.
 #derive.endpoint(get="/lessons/{lesson_id}")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::get_lesson(
-  self : Self,
-  lesson_id : String,
-  auth_header : String
-) -> String raise @common.AgentError {
+pub fn ApiAgent::get_lesson(self : Self, lesson_id : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
-  let (user_id, role) = auth_user(auth_header)
+  if !validate_lesson_id(lesson_id) { return auth_error_json("Invalid lesson ID") }
+  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   user_get_lesson(user_id, role, lesson_id)
 }
 
 ///|
-/// Toggle lesson active state (teacher or admin only)
-/// Routes to UserAgent which updates SurrealDB directly.
+/// Toggle lesson active state (teacher/admin only).
 #derive.endpoint(post="/lessons/{lesson_id}/toggle")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::toggle_lesson(
-  self : Self,
-  lesson_id : String,
-  auth_header : String
-) -> String raise @common.AgentError {
+pub fn ApiAgent::toggle_lesson(self : Self, lesson_id : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
-  let (user_id, role) = auth_user(auth_header)
-  if role != "teacher" && role != "admin" {
-    raise @common.AgentError::InvalidInput("Forbidden: teachers only")
-  }
+  if !validate_lesson_id(lesson_id) { return auth_error_json("Invalid lesson ID") }
+  let (user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
+  if role != "teacher" && role != "admin" { return auth_error_json("Forbidden: teachers only") }
   let toggled = user_toggle_lesson(user_id, role, lesson_id)
   "{\"toggled\":" + toggled.to_string() + "}"
 }
 
 ///|
-/// Call UserAgent::toggle_lesson via RPC.
 fn user_toggle_lesson(user_id : String, role : String, lesson_id : String) -> Bool raise @common.AgentError {
-  let ctor_data = @rpcTypes.DataValue::Tuple([
-    @schema.to_element_value_as(user_id),
-    @schema.to_element_value_as(role),
-  ])
+  let ctor_data = @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(user_id), @schema.to_element_value_as(role)])
   let client = @rpc.AgentClient::get("UserAgent", ctor_data)
   defer client.drop()
-  let result = client.invoke_and_await(
-    "toggle_lesson",
-    @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
-  )
+  let result = client.invoke_and_await("toggle_lesson", @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]))
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
 }
 
 ///|
-/// Assign teacher to subject (admin only)
+/// Assign teacher to subject (admin only).
 #derive.endpoint(post="/admin/assign?teacher_id={teacher_id}&subject={subject}")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::assign_teacher(
-  self : Self,
-  teacher_id : String,
-  subject : String,
-  auth_header : String
-) -> String raise @common.AgentError {
+pub fn ApiAgent::assign_teacher(self : Self, teacher_id : String, subject : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
-  let (_user_id, role) = auth_user(auth_header)
-  if role != "admin" {
-    raise @common.AgentError::InvalidInput("Forbidden: admin only")
-  }
+  let (_user_id, role) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if _user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
+  if role != "admin" { return auth_error_json("Forbidden: admin only") }
   let assigned = admin_assign_teacher(teacher_id, subject)
   "{\"assigned\":" + assigned.to_string() + "}"
 }
 
 ///|
-fn main {
-
-}
+fn main {}

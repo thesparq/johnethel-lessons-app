@@ -16,7 +16,7 @@ fn init{
       methods: [
         {
           name: "download_file",
-          description: "Serve static files. Falls back to index.html for SPA routing.",
+          description: "Serve static files. Falls back to index.html for SPA routing.  Special handling for /config.js — generated from env vars.",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Get,

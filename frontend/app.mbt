@@ -2,13 +2,53 @@
 let api_base : String = "http://johnethel-lessons-app.localhost:9006"
 
 ///|
+let redirect_uri : String = "http://johnethel-lessons-static.localhost:9006/callback"
+
+// Authentik config — populated by config.js before this script runs
+#cfg(target="js")
+extern "js" fn js_get_config_json() -> String =
+  #|() => { try { const c = window.__CONFIG__ || {}; return JSON.stringify({u: c.authentikUrl || "", c: c.clientId || ""}); } catch(e) { return "{}"; } }
+
+#cfg(not(target="js"))
+fn js_get_config_json() -> String { "{}" }
+
+///|
+fn parse_config() -> (String, String) {
+  let raw = js_get_config_json()
+  let json = @json.parse(raw) catch { _ => return ("", "") }
+  match json {
+    Json::Object(obj) => {
+      let url = match obj.get("u") { Some(Json::String(s)) => s; _ => "" }
+      let client_id = match obj.get("c") { Some(Json::String(s)) => s; _ => "" }
+      (url, client_id)
+    }
+    _ => ("", "")
+  }
+}
+
+#cfg(target="js")
+extern "js" fn js_session_set(key : String, value : String) -> Unit =
+  #|(key, value) => { try { sessionStorage.setItem(key, value); } catch(e) {} }
+
+#cfg(target="js")
+extern "js" fn js_session_get(key : String) -> String =
+  #|(key) => { try { return sessionStorage.getItem(key) || ""; } catch(e) { return ""; } }
+
+#cfg(not(target="js"))
+fn js_session_set(key_ : String, value_ : String) -> Unit { ignore((key_, value_)) }
+
+#cfg(not(target="js"))
+fn js_session_get(key_ : String) -> String { ignore(key_); "" }
+
+///|
 enum Route {
   Home
   SubjectDetail(String)
   LessonDetail(String)
   Admin
   Login
-}
+  Callback(String)
+} derive(Eq)
 
 ///|
 struct SubjectInfo {
@@ -23,6 +63,7 @@ struct LessonInfo {
   week : Double
   term : String
   subject : String
+  active : Bool
 }
 
 ///|
@@ -49,16 +90,17 @@ enum Msg {
   ToggleLesson(String)
   ToggleResult(String)
   ToggleFailed(String)
-  TokenInput(String)
-  LoginSubmit
   Logout
+  LoginWithAuthentik
+  PkceReady(String)
+  AuthCallback(String)
+  LoginFailed(String)
 }
 
 ///|
 struct Model {
   route : Route
   token : String
-  token_input : String
   role : String
   subjects : Array[SubjectInfo]
   lessons : Array[LessonInfo]
@@ -72,7 +114,6 @@ fn init_model() -> Model {
   {
     route: Home,
     token: "",
-    token_input: "",
     role: "student",
     subjects: [],
     lessons: [],
@@ -83,18 +124,39 @@ fn init_model() -> Model {
 }
 
 ///|
-fn role_from_token(token : String) -> String {
-  let parts = token.split("|").to_array()
-  if parts.length() == 2 {
-    parts[1].to_owned()
-  } else {
-    "student"
-  }
+///|
+#cfg(target="js")
+extern "js" fn js_jwt_role(token : String) -> String =
+  #|(token) => {
+  #|  try {
+  #|    const parts = token.split(".");
+  #|    if (parts.length < 2) return "student";
+  #|    const payload = JSON.parse(atob(parts[1].replace(/-/g,"+").replace(/_/g,"/")));
+  #|    const groups = payload.groups || [];
+  #|    if (groups.includes("teachers") || groups.includes("teacher")) return "teacher";
+  #|    if (groups.includes("admin") || groups.includes("admins")) return "admin";
+  #|    return "student";
+  #|  } catch(e) { return "student"; }
+  #| }
+
+#cfg(not(target="js"))
+fn js_jwt_role(token_ : String) -> String { ignore(token_); "student" }
+
+///|
+fn role_from_jwt(token : String) -> String {
+  if !token.contains(".") { return "student" }
+  js_jwt_role(token)
 }
 
 ///|
 fn route_from_path(path : String) -> Route {
   let path = if path.has_prefix("/") { path } else { "/" + path }
+  // Remove trailing slash for consistent matching
+  let path = if path.length() > 1 && path.has_suffix("/") {
+    path[:path.length() - 1].to_owned()
+  } else {
+    path
+  }
   let segments = path.split("/").to_array()
   match segments {
     ["", ""] => Home
@@ -102,6 +164,7 @@ fn route_from_path(path : String) -> Route {
     ["", "lessons", id] => LessonDetail(id.to_owned())
     ["", "admin"] => Admin
     ["", "login"] => Login
+    ["", "callback"] => Callback("")
     _ => Home
   }
 }
@@ -151,6 +214,73 @@ extern "js" fn js_local_storage_set(key : String, value : String) -> Unit =
 extern "js" fn js_local_storage_remove(key : String) -> Unit =
   #|(key) => { try { localStorage.removeItem(key); } catch(e) {} }
 
+#cfg(target="js")
+extern "js" fn js_current_url() -> String =
+  #|() => { try { return window.location.pathname; } catch(e) { return "/"; } }
+
+#cfg(target="js")
+extern "js" fn js_get_query_param(name : String) -> String =
+  #|(name) => { try { const p = new URLSearchParams(window.location.search); return p.get(name) || ""; } catch(e) { return ""; } }
+
+#cfg(target="js")
+extern "js" fn js_redirect(url : String) -> Unit =
+  #|(url) => { window.location.href = url; }
+
+#cfg(target="js")
+extern "js" fn js_pkce_generate(
+  on_success : (String) -> Unit,
+  on_error : (String) -> Unit,
+) -> Unit =
+  #|(onSuccess, onError) => {
+  #|  try {
+  #|    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  #|    const arr = new Uint8Array(43);
+  #|    crypto.getRandomValues(arr);
+  #|    let verifier = "";
+  #|    for (let i = 0; i < 43; i++) verifier += chars[arr[i] % chars.length];
+  #|    const encoder = new TextEncoder();
+  #|    crypto.subtle.digest("SHA-256", encoder.encode(verifier))
+  #|      .then(hash => {
+  #|        const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
+  #|          .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  #|        onSuccess(JSON.stringify({ v: verifier, c: challenge }));
+  #|      })
+  #|      .catch(e => onError(e.toString()));
+  #|  } catch(e) { onError(e.toString()); }
+  #| }
+
+#cfg(not(target="js"))
+fn js_redirect(url_ : String) -> Unit { ignore(url_) }
+
+#cfg(not(target="js"))
+fn js_pkce_generate(on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit { on_error_("stub") }
+
+#cfg(target="js")
+extern "js" fn js_form_post(
+  url : String,
+  body : String,
+  on_success : (String) -> Unit,
+  on_error : (String) -> Unit,
+) -> Unit =
+  #|(url, body, onSuccess, onError) => {
+  #|  fetch(url, {
+  #|    method: "POST",
+  #|    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  #|    body: body,
+  #|  })
+  #|    .then(r => r.text())
+  #|    .then(text => onSuccess(text))
+  #|    .catch(e => onError(e.toString()));
+  #| }
+
+#cfg(not(target="js"))
+fn js_redirect(url_ : String) -> Unit { ignore(url_) }
+
+#cfg(not(target="js"))
+fn js_form_post(url_ : String, body_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
+  ignore((url_, body_))
+  on_error_("stub")
+}
 #cfg(not(target="js"))
 fn js_auth_fetch(url_ : String, http_method_ : String, token_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
   ignore((url_, http_method_, token_))
@@ -167,8 +297,17 @@ fn js_local_storage_get(key_ : String) -> String { ignore(key_); "" }
 fn js_local_storage_set(key_ : String, value_ : String) -> Unit { ignore((key_, value_)); () }
 #cfg(not(target="js"))
 fn js_local_storage_remove(key_ : String) -> Unit { ignore(key_); () }
-
-// --- API commands ---
+#cfg(not(target="js"))
+fn js_current_url() -> String { "/" }
+#cfg(not(target="js"))
+fn js_get_query_param(name_ : String) -> String { ignore(name_); "" }
+#cfg(not(target="js"))
+fn js_redirect(url_ : String) -> Unit { ignore(url_) }
+#cfg(not(target="js"))
+fn js_form_post(url_ : String, body_ : String, on_success_ : (String) -> Unit, on_error_ : (String) -> Unit) -> Unit {
+  ignore((url_, body_))
+  on_error_("stub")
+}
 
 ///|
 fn fetch_cmd(
@@ -198,6 +337,45 @@ fn post_cmd(emit : @cmd.Emit[Msg], url : String, token : String) -> @cmd.Cmd {
       token,
       fn(body) { scheduler.add(emit(ToggleResult(body))) },
       fn(e) { scheduler.add(emit(ToggleFailed(e))) },
+    )
+  })
+}
+
+///|
+fn pkce_cmd(emit : @cmd.Emit[Msg]) -> @cmd.Cmd {
+  @cmd.custom_cmd(fn(scheduler : &@cmd.Scheduler) {
+    js_pkce_generate(
+      fn(data) { scheduler.add(emit(PkceReady(data))) },
+      fn(e) { scheduler.add(emit(LoginFailed(e))) },
+    )
+  })
+}
+
+///|
+fn exchange_cmd(emit : @cmd.Emit[Msg], code : String) -> @cmd.Cmd {
+  let (auth_url, client_id) = parse_config()
+  let pkce_verifier = js_session_get("pkce_verifier")
+  let body = "grant_type=authorization_code&code=" + code + "&redirect_uri=" + redirect_uri + "&client_id=" + client_id
+  let body = if pkce_verifier != "" { body + "&code_verifier=" + pkce_verifier } else { body }
+  @cmd.custom_cmd(fn(scheduler : &@cmd.Scheduler) {
+    js_form_post(
+      auth_url + "/application/o/token/",
+      body,
+      fn(response_text) {
+        let json = @json.parse(response_text) catch { _ => { scheduler.add(emit(LoginFailed("Invalid JSON"))); return } }
+        match json {
+          Json::Object(obj) => {
+            let token = match obj.get("id_token") { Some(Json::String(s)) => s; _ => match obj.get("access_token") { Some(Json::String(s)) => s; _ => "" } }
+            if token != "" {
+              scheduler.add(emit(AuthCallback(token)))
+            } else {
+              scheduler.add(emit(LoginFailed("No token in response")))
+            }
+          }
+          _ => scheduler.add(emit(LoginFailed("Unexpected response")))
+        }
+      },
+      fn(e) { scheduler.add(emit(LoginFailed(e))) },
     )
   })
 }
@@ -271,9 +449,14 @@ fn parse_lessons(body : String) -> Array[LessonInfo] {
               Some(Json::String(s)) => s
               _ => ""
             }
-            { id, title, week, term, subject }
+            let active : Bool = match obj.get("active") {
+              Some(Json::True) => true
+              Some(Json::False) => false
+              _ => true
+            }
+            { id, title, week, term, subject, active }
           }
-          _ => { id: "unknown", title: "unknown", week: 0.0, term: "", subject: "" }
+          _ => { id: "unknown", title: "unknown", week: 0.0, term: "", subject: "", active: true }
         }
       })
     _ => []
@@ -357,6 +540,7 @@ fn route_cmd(emit : @cmd.Emit[Msg], token : String, route : Route) -> @cmd.Cmd {
     LessonDetail(id) => fetch_cmd(emit, api_base + "/lessons/" + id, "GET", token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
     Admin => @cmd.none
     Login => @cmd.none
+    Callback(_) => @cmd.none
   }
 }
 
@@ -365,16 +549,27 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
   match msg {
     UrlChanged(url) => {
       let route = route_from_path(url.path)
-      match (model.token == "", route) {
-        (true, Login) => {
-          (@cmd.none, { ..model, route, loading: false, error: "" })
+      match route {
+        Callback(_) => {
+          let code = js_get_query_param("code")
+          if code != "" {
+            let cmd = exchange_cmd(emit, code)
+            (cmd, { ..model, route, loading: true, error: "" })
+          } else {
+            (@cmd.none, { ..model, route: Login, loading: false, error: "No authorization code received" })
+          }
         }
-        (true, _) => {
-          (@nav.push_url("/login"), { ..model, route: Login, loading: false, error: "" })
-        }
-        _ => {
-          let cmd = route_cmd(emit, model.token, route)
-          (cmd, { ..model, route, loading: true, error: "" })
+        _ => match (model.token == "", route) {
+          (true, Login) => {
+            (@cmd.none, { ..model, route, loading: false, error: "" })
+          }
+          (true, _) => {
+            (@nav.push_url("/login"), { ..model, route: Login, loading: false, error: "" })
+          }
+          _ => {
+            let cmd = route_cmd(emit, model.token, route)
+            (cmd, { ..model, route, loading: true, error: "" })
+          }
         }
       }
     }
@@ -417,18 +612,41 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     }
     ToggleFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Toggle failed: " + err })
-    TokenInput(text) => (@cmd.none, { ..model, token_input: text })
-    LoginSubmit => {
-      let token = model.token_input
-      let role = role_from_token(token)
-      js_local_storage_set("jwt_token", token)
-      (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
-    }
     Logout => {
       js_local_storage_remove("jwt_token")
       let model = init_model()
       (@nav.push_url("/login"), { ..model, route: Login })
     }
+    LoginWithAuthentik => {
+      (pkce_cmd(emit), { ..model, loading: true, error: "" })
+    }
+    PkceReady(data) => {
+      let (auth_url_str, client_id_str) = parse_config()
+      let json = @json.parse(data) catch { _ => return (@cmd.none, { ..model, loading: false, error: "PKCE failed" }) }
+      match json {
+        Json::Object(obj) => {
+          let verifier = match obj.get("v") { Some(Json::String(s)) => s; _ => "" }
+          let challenge = match obj.get("c") { Some(Json::String(s)) => s; _ => "" }
+          if verifier == "" || challenge == "" {
+            return (@cmd.none, { ..model, loading: false, error: "PKCE generation failed" })
+          }
+          js_session_set("pkce_verifier", verifier)
+          let state = "csrf_" + verifier[0:10].to_owned()
+          let url = auth_url_str + "/application/o/authorize/?client_id=" + client_id_str + "&redirect_uri=" + redirect_uri + "&response_type=code&scope=openid+profile+email&code_challenge=" + challenge + "&code_challenge_method=S256&state=" + state
+          js_redirect(url)
+          (@cmd.none, { ..model, loading: false, error: "" })
+        }
+        _ => (@cmd.none, { ..model, loading: false, error: "PKCE parse failed" })
+      }
+    }
+    AuthCallback(body) => {
+      let token = body
+      let role = role_from_jwt(token)
+      js_local_storage_set("jwt_token", token)
+      (@nav.push_url("/"), { ..model, token, role, error: "", route: Home })
+    }
+    LoginFailed(err) =>
+      (@cmd.none, { ..model, loading: false, error: "Login failed: " + err })
   }
 }
 
@@ -497,6 +715,7 @@ fn view_content(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     LessonDetail(_) => view_lesson(emit, model)
     Admin => view_admin()
     Login => view_login(emit, model)
+    Callback(_) => view_login(emit, model)
   }
 }
 
@@ -507,21 +726,10 @@ fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     [
       @html.h2("Johnethel School"),
       @html.p("Sign in to continue."),
-      @html.div(
-        style=["font-size: 12px", "color: #666", "margin-bottom: 12px"],
-        "Formats: username|role  (e.g.  teacher|teacher,  admin|admin,  student|student)",
-      ),
-      @html.input(
-        placeholder="username|role",
-        value=model.token_input,
-        on_input=fn(s) { emit(TokenInput(s)) },
-        style=["width: 100%", "padding: 8px", "margin: 8px 0", "box-sizing: border-box"],
-        "",
-      ),
       @html.button(
-        on_click=emit(LoginSubmit),
-        style=["padding: 8px 24px", "margin-top: 8px", "border: 1px solid #ccc", "border-radius: 4px", "cursor: pointer"],
-        "Sign in",
+        on_click=emit(LoginWithAuthentik),
+        style=["padding: 12px 32px", "margin: 12px 0", "background: #3a7bd5", "color: white", "border: none", "border-radius: 6px", "cursor: pointer", "font-size: 14px"],
+        "Sign in with Authentik",
       ),
     ],
   )
@@ -561,24 +769,45 @@ fn view_subject(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
     SubjectDetail(id) => id
     _ => ""
   }
+  let is_teacher = model.role == "teacher" || model.role == "admin"
+  let visible_lessons = if is_teacher {
+    model.lessons
+  } else {
+    model.lessons.filter(fn(l) { l.active })
+  }
   @html.div(
     [
       @html.a(href="/", style=["color: #666"], "\u2190 Back to subjects"),
       @html.h1("Lessons for " + subject_id),
-      if model.lessons.length() == 0 {
-        @html.p("No lessons found for this subject.")
+      if visible_lessons.length() == 0 {
+        let msg = if is_teacher {
+          "No lessons found for this subject."
+        } else {
+          "No active lessons available for this subject. Check back later or contact your teacher."
+        }
+        @html.p(msg)
       } else {
         @html.ul(
           style=["list-style: none", "padding: 0"],
-          model.lessons.map(fn(l) {
-            @html.li(
-              style=["margin: 8px 0"],
-              [@html.a(
-                href="/lessons/" + l.id,
-                style=["display: block", "padding: 12px 16px", "background: #f8f9fa", "border-radius: 6px", "text-decoration: none", "color: #333"],
-                "Week " + week_str(l.week) + ": " + l.title + " (" + l.term + ")",
-              )],
-            )
+          visible_lessons.map(fn(l) {
+            if l.active {
+              @html.li(
+                style=["margin: 8px 0"],
+                [@html.a(
+                  href="/lessons/" + l.id,
+                  style=["display: block", "padding: 12px 16px", "background: #f8f9fa", "border-radius: 6px", "text-decoration: none", "color: #333"],
+                  "Week " + week_str(l.week) + ": " + l.title + " (" + l.term + ")",
+                )],
+              )
+            } else {
+              @html.li(
+                style=["margin: 8px 0"],
+                [@html.div(
+                  style=["display: block", "padding: 12px 16px", "background: #e9ecef", "border-radius: 6px", "color: #6c757d"],
+                  "Week " + week_str(l.week) + ": " + l.title + " (" + l.term + ") — Inactive",
+                )],
+              )
+            }
           }),
         )
       },
@@ -653,9 +882,20 @@ fn subscriptions(emit : @cmd.Emit[Msg], _model : Model) -> @sub.Sub {
 ///|
 fn main {
   let token = js_local_storage_get("jwt_token")
-  let role = role_from_token(token)
-  let route = if token == "" { Login } else { Home }
-  let model = { ..init_model(), token, role, route }
+  let role = role_from_jwt(token)
+  let url_path = js_current_url()
+  let initial_route = route_from_path(url_path)
+  let route = if token == "" && initial_route != Login && initial_route != Callback("") {
+    Login
+  } else {
+    initial_route
+  }
+  // Show loading immediately for data routes before UrlChanged fires
+  let loading = match route {
+    Home | SubjectDetail(_) | LessonDetail(_) | Callback(_) => true
+    _ => false
+  }
+  let model = { ..init_model(), token, role, route, loading }
   let (_emit, root) = @rabbita.cell_with_emit(
     model~,
     update~,

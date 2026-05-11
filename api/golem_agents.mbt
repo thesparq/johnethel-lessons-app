@@ -68,7 +68,7 @@ fn init{
     name: "ApiAgent",
     agent_type: {
       type_name: "ApiAgent",
-      description: "API entry point agent — ephemeral, one per request",
+      description: "API entry point agent — ephemeral, one per request.  Auth validated by Golem gateway via security scheme (Authentik). Uses per-endpoint auth to allow CORS preflight through.",
       source_language: "moonbit",
       constructor_: {
         name: Some("new"),
@@ -78,8 +78,32 @@ fn init{
       },
       methods: [
         {
+          name: "get_config",
+          description: "Public: return Authentik config for frontend.",
+          http_endpoint: [
+            {
+              http_method: @common.HttpMethod::Get,
+              path_suffix: [@common.PathSegment::Literal("config")],
+              header_vars: [],
+              query_vars: [],
+              auth_details: Some({ required: false, }),
+              cors_options: { allowed_patterns: [], },
+            },
+          ],
+          prompt_hint: None,
+          input_schema: @rpcTypes.DataSchema::Tuple([]),
+          output_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "result",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
+        },
+        {
           name: "get_subjects",
-          description: "List all subjects — open to everyone",
+          description: "List all subjects.",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Get,
@@ -97,7 +121,7 @@ fn init{
             (
               "auth_header",
               @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -112,7 +136,7 @@ fn init{
         },
         {
           name: "get_lessons",
-          description: "List lessons for a subject — open to everyone",
+          description: "List lessons for a subject.",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Get,
@@ -142,7 +166,7 @@ fn init{
             (
               "auth_header",
               @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -157,7 +181,7 @@ fn init{
         },
         {
           name: "get_lesson",
-          description: "Get lesson content — open to everyone",
+          description: "Get full lesson content.",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Get,
@@ -186,7 +210,7 @@ fn init{
             (
               "auth_header",
               @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -201,7 +225,7 @@ fn init{
         },
         {
           name: "toggle_lesson",
-          description: "Toggle lesson active state (teacher or admin only)  Routes to UserAgent which updates SurrealDB directly.",
+          description: "Toggle lesson active state (teacher/admin only).",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Post,
@@ -231,7 +255,7 @@ fn init{
             (
               "auth_header",
               @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -246,7 +270,7 @@ fn init{
         },
         {
           name: "assign_teacher",
-          description: "Assign teacher to subject (admin only)",
+          description: "Assign teacher to subject (admin only).",
           http_endpoint: [
             {
               http_method: @common.HttpMethod::Post,
@@ -282,7 +306,7 @@ fn init{
             (
               "auth_header",
               @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -316,7 +340,7 @@ fn init{
             "Expected 0 elements, got " + elements.length().to_string(),
           )
         }
-        let agent = ApiAgent::new()
+        let agent = ApiAgent::new(principal)
         let constructed = @agents.ConstructedAgent::{
           raw: agent,
           snapshottable: None,
@@ -365,6 +389,16 @@ impl @agents.RawAgent for ApiAgent with invoke(
 ) {
   try {
     match method_name {
+      "get_config" => {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 0 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 0 elements, got " + elements.length().to_string(),
+          )
+        }
+        let result = self.get_config()
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
+      }
       "get_subjects" => {
         let elements = @extractor.extract_tuple(input)
         guard elements.length() == 1 else {
@@ -372,7 +406,7 @@ impl @agents.RawAgent for ApiAgent with invoke(
             "Expected 1 elements, got " + elements.length().to_string(),
           )
         }
-        let auth_header :String = @schema.from_element_value_as(elements[0])
+        let auth_header :String? = @schema.from_element_value_as(elements[0])
         let result = self.get_subjects(auth_header)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
@@ -384,7 +418,7 @@ impl @agents.RawAgent for ApiAgent with invoke(
           )
         }
         let subject_id :String = @schema.from_element_value_as(elements[0])
-        let auth_header :String = @schema.from_element_value_as(elements[1])
+        let auth_header :String? = @schema.from_element_value_as(elements[1])
         let result = self.get_lessons(subject_id, auth_header)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
@@ -396,7 +430,7 @@ impl @agents.RawAgent for ApiAgent with invoke(
           )
         }
         let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let auth_header :String = @schema.from_element_value_as(elements[1])
+        let auth_header :String? = @schema.from_element_value_as(elements[1])
         let result = self.get_lesson(lesson_id, auth_header)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
@@ -408,7 +442,7 @@ impl @agents.RawAgent for ApiAgent with invoke(
           )
         }
         let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let auth_header :String = @schema.from_element_value_as(elements[1])
+        let auth_header :String? = @schema.from_element_value_as(elements[1])
         let result = self.toggle_lesson(lesson_id, auth_header)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
@@ -421,7 +455,7 @@ impl @agents.RawAgent for ApiAgent with invoke(
         }
         let teacher_id :String = @schema.from_element_value_as(elements[0])
         let subject :String = @schema.from_element_value_as(elements[1])
-        let auth_header :String = @schema.from_element_value_as(elements[2])
+        let auth_header :String? = @schema.from_element_value_as(elements[2])
         let result = self.assign_teacher(teacher_id, subject, auth_header)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }

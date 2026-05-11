@@ -11,6 +11,10 @@ import {
   "golemcloud/golem_sdk/interface/golem/core/types" @rpcTypes,
   "golemcloud/golem_sdk/interface/wasi/clocks/wallClock" @wallClock,
   "golemcloud/golem_sdk/interface/golem/agent/host" @agentHost,
+  "golemcloud/golem_sdk/http" @http,
+  "golemcloud/golem_sdk/interface/wasi/cli/environment" @environment,
+  "golemcloud/golem_sdk/interface/wasi/http/types" @httpTypes,
+  "moonbitlang/core/json" @json,
 }
 
 options(
