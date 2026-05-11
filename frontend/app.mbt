@@ -78,7 +78,7 @@ struct LessonContent {
   week : Double
   term : String
   active : Bool
-  body : String
+  body_json : String
 }
 
 ///|
@@ -238,120 +238,12 @@ extern "js" fn js_url_decode(s : String) -> String =
   #|(s) => { try { return decodeURIComponent(s); } catch(e) { return s; } }
 
 #cfg(target="js")
-extern "js" fn js_render_lesson(json_str : String) -> String =
-  #|(jsonStr) => {
-  #|  try {
-  #|    const lesson = JSON.parse(jsonStr);
-  #|    let html = "";
-  #|    
-  #|    // Header info
-  #|    if (lesson.class_level) html += '<p><strong>Class:</strong> ' + lesson.class_level + ' &middot; <strong>Duration:</strong> ' + (lesson.duration_mins||'') + ' mins</p>';
-  #|    
-  #|    // Introduction
-  #|    if (lesson.introduction) html += '<h3>Introduction</h3><p>' + lesson.introduction + '</p>';
-  #|    
-  #|    // Objectives
-  #|    if (lesson.objectives && lesson.objectives.length) {
-  #|      html += '<h3>Learning Objectives</h3><ul>';
-  #|      lesson.objectives.forEach(function(o) { html += '<li>' + (typeof o === 'string' ? o : o.objective) + '</li>'; });
-  #|      html += '</ul>';
-  #|    }
-  #|    
-  #|    // Prior Knowledge
-  #|    if (lesson.prior_knowledge && lesson.prior_knowledge.length && lesson.prior_knowledge[0].length > 0) {
-  #|      html += '<h3>Prior Knowledge</h3><ul>';
-  #|      lesson.prior_knowledge.forEach(function(p) { if (typeof p === 'string' && p.length > 0) html += '<li>' + p + '</li>'; });
-  #|      html += '</ul>';
-  #|    }
-  #|    
-  #|    // Materials
-  #|    if (lesson.materials && lesson.materials.length) {
-  #|      html += '<h3>Materials Needed</h3><ul>';
-  #|      lesson.materials.forEach(function(m) { html += '<li>' + m + '</li>'; });
-  #|      html += '</ul>';
-  #|    }
-  #|    
-  #|    // Content Sections
-  #|    if (lesson.content_sections && lesson.content_sections.length) {
-  #|      html += '<h3>Lesson Content</h3>';
-  #|      lesson.content_sections.forEach(function(s, idx) {
-  #|        html += '<h4>' + (idx+1) + '. ' + s.header + '</h4>';
-  #|        html += '<p>' + s.body + '</p>';
-  #|        if (s.sub_points && s.sub_points.length) {
-  #|          html += '<ul>';
-  #|          s.sub_points.forEach(function(sp) { html += '<li><strong>' + sp.text + '</strong></li>'; });
-  #|          html += '</ul>';
-  #|        }
-  #|      });
-  #|    }
-  #|    
-  #|    // Key Points
-  #|    if (lesson.key_points && lesson.key_points.length) {
-  #|      html += '<h3>Key Points</h3><ul>';
-  #|      lesson.key_points.forEach(function(k) { html += '<li>' + k + '</li>'; });
-  #|      html += '</ul>';
-  #|    }
-  #|    
-  #|    // Success Criteria
-  #|    if (lesson.success_criteria && lesson.success_criteria.length) {
-  #|      html += '<h3>Success Criteria</h3><ul>';
-  #|      lesson.success_criteria.forEach(function(s) { html += '<li>' + s + '</li>'; });
-  #|      html += '</ul>';
-  #|    }
-  #|    
-  #|    // Lesson Steps
-  #|    if (lesson.lesson_steps && lesson.lesson_steps.length) {
-  #|      html += '<h3>Lesson Procedure</h3>';
-  #|      lesson.lesson_steps.forEach(function(s) {
-  #|        html += '<div style="margin-bottom:16px;padding:12px;background:#f8f9fa;border-radius:6px">';
-  #|        html += '<h4 style="margin:0 0 4px 0">Step ' + (s.step_number||s.step) + ': ' + (s.phase||'') + '</h4>';
-  #|        html += '<p><em>Duration:</em> ' + (s.duration_mins||'') + ' min</p>';
-  #|        if (s.pupil_activities) html += '<p><strong>Activity:</strong> ' + s.pupil_activities + '</p>';
-  #|        if (s.teaching_strategy) html += '<p><strong>Strategy:</strong> ' + s.teaching_strategy + '</p>';
-  #|        html += '</div>';
-  #|      });
-  #|    }
-  #|    
-  #|    // MCQ Questions
-  #|    if (lesson.mcq_questions && lesson.mcq_questions.length) {
-  #|      html += '<h3>Revision Questions</h3>';
-  #|      lesson.mcq_questions.forEach(function(q, idx) {
-  #|        html += '<div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #dee2e6;border-radius:6px">';
-  #|        html += '<p><strong>' + (idx+1) + '. ' + q.question + '</strong></p>';
-  #|        var opts = ['A','B','C','D'];
-  #|        opts.forEach(function(o) {
-  #|          var key = 'option_' + o.toLowerCase();
-  #|          if (q[key]) html += '<div style="margin-left:16px">' + o + '. ' + q[key] + '</div>';
-  #|        });
-  #|        html += '</div>';
-  #|      });
-  #|    }
-  #|    
-  #|    // Theoretical Questions
-  #|    if (lesson.theoretical_questions && lesson.theoretical_questions.length) {
-  #|      html += '<h3>Theory Questions</h3>';
-  #|      lesson.theoretical_questions.forEach(function(q, idx) {
-  #|        html += '<div style="margin-bottom:12px;padding:12px;background:#fff;border:1px solid #dee2e6;border-radius:6px">';
-  #|        html += '<p><strong>' + (idx+1) + '. ' + q.question + '</strong></p>';
-  #|        if (q.parts && q.parts.length) q.parts.forEach(function(p) { html += '<p style="margin-left:16px">' + p + '</p>'; });
-  #|        html += '</div>';
-  #|      });
-  #|    }
-  #|    
-  #|    // Conclusion
-  #|    if (lesson.conclusion) html += '<h3>Conclusion</h3><p>' + lesson.conclusion + '</p>';
-  #|    
-  #|    // Textbook References
-  #|    if (lesson.textbook_references && lesson.textbook_references.length) {
-  #|      html += '<h3>References</h3><ul>';
-  #|      lesson.textbook_references.forEach(function(r) { html += '<li>' + r + '</li>'; });
-  #|      html += '</ul>';
-  #|    }
-  #|    
-  #|    return html;
-  #|  } catch(e) { return '<p>Error rendering lesson</p>'; }
-  #| }
-
+#cfg(target="js")
+#cfg(target="js")
+#cfg(not(target="js"))
+fn js_set_inner_html(id_ : String, html_ : String) -> Unit { ignore((id_, html_)) }
+#cfg(not(target="js"))
+fn js_inject_lesson(html_ : String) -> Unit { ignore(html_) }
 #cfg(not(target="js"))
 fn js_url_encode(s : String) -> String { s }
 #cfg(not(target="js"))
@@ -641,7 +533,7 @@ fn parse_lesson_obj(obj : Map[String, Json]) -> LessonContent {
         _ => Json::object(obj).stringify()
       }
   }
-  { id, title, subject, week, term, active, body: Json::object(obj).stringify() }
+  { id, title, subject, week, term, active, body_json: Json::object(obj).stringify() }
 }
 
 ///|
@@ -734,7 +626,7 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
         } else {
           (@cmd.none, { ..model, current_lesson: None, loading: false, error: "" })
         }
-        _ => (@cmd.none, { ..model, current_lesson: lesson, loading: false, error: "" })
+        Some(l) => (@cmd.none, { ..model, current_lesson: Some(l), loading: false, error: "" })
       }
     }
     LessonFailed(err) =>
@@ -996,16 +888,167 @@ fn view_lesson(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
           ),
         )
       }
-      children.push(
-        @html.div(
-          style=["white-space: pre-wrap", "line-height: 1.6"],
-          js_render_lesson(lesson.body),
-        ),
-      )
+      children.push(view_lesson_content(lesson.body_json))
       @html.div(children)
     }
     None => @html.div("Lesson not found.")
   }
+}
+
+///|
+fn view_lesson_content(body_json : String) -> @html.Html {
+  let json = @json.parse(body_json) catch { _ => return @html.p("Error loading lesson content") }
+  let children : Array[@html.Html] = []
+  match json {
+    Json::Object(obj) => {
+      // Class level + duration
+      let class_level = match obj.get("class_level") { Some(Json::String(s)) => s; _ => "" }
+      let duration = match obj.get("duration_mins") { Some(Json::Number(n, ..)) => n.to_int().to_string(); _ => "" }
+      if class_level != "" || duration != "" {
+        let info = if class_level != "" && duration != "" { "Class: " + class_level + " \u00b7 Duration: " + duration + " mins" } else if class_level != "" { "Class: " + class_level } else { "Duration: " + duration + " mins" }
+        children.push(@html.p(style=["color: #666", "margin-bottom: 20px"], info))
+      }
+      // Introduction
+      match obj.get("introduction") {
+        Some(Json::String(s)) => { children.push(@html.h3("Introduction")); children.push(@html.p(s)) }
+        _ => ()
+      }
+      // Objectives
+      match obj.get("objectives") {
+        Some(Json::Array(arr)) => {
+          let items : Array[@html.Html] = []
+          for o in arr {
+            match o {
+              Json::Object(o2) => match o2.get("objective") { Some(Json::String(s)) => items.push(@html.li(s)); _ => () }
+              Json::String(s) => items.push(@html.li(s))
+              _ => ()
+            }
+          }
+          if items.length() > 0 { children.push(@html.h3("Learning Objectives")); children.push(@html.ul(items)) }
+        }
+        _ => ()
+      }
+      // Content Sections
+      match obj.get("content_sections") {
+        Some(Json::Array(sections)) => {
+          if sections.length() > 0 { children.push(@html.h3("Lesson Content")) }
+          for i = 0; i < sections.length(); i = i + 1 {
+            match sections[i] {
+              Json::Object(sec) => {
+                let header = match sec.get("header") { Some(Json::String(s)) => s; _ => "" }
+                let body = match sec.get("body") { Some(Json::String(s)) => s; _ => "" }
+                let num = (i + 1).to_string()
+                children.push(@html.h4(num + ". " + header))
+                children.push(@html.p(body))
+                match sec.get("sub_points") {
+                  Some(Json::Array(subs)) => {
+                    let items : Array[@html.Html] = []
+                    for sp in subs {
+                      match sp {
+                        Json::Object(spo) => match spo.get("text") { Some(Json::String(s)) => items.push(@html.li(s)); _ => () }
+                        Json::String(s) => items.push(@html.li(s))
+                        _ => ()
+                      }
+                    }
+                    if items.length() > 0 { children.push(@html.ul(items)) }
+                  }
+                  _ => ()
+                }
+              }
+              _ => ()
+            }
+          }
+        }
+        _ => ()
+      }
+      // Key Points
+      match obj.get("key_points") {
+        Some(Json::Array(arr)) => {
+          let items : Array[@html.Html] = []
+          for k in arr { match k { Json::String(s) => items.push(@html.li(s)); _ => () } }
+          if items.length() > 0 { children.push(@html.h3("Key Points")); children.push(@html.ul(items)) }
+        }
+        _ => ()
+      }
+      // Lesson Steps
+      match obj.get("lesson_steps") {
+        Some(Json::Array(steps)) => {
+          if steps.length() > 0 { children.push(@html.h3("Lesson Procedure")) }
+          for s in steps {
+            match s {
+              Json::Object(step) => {
+                let step_num = match step.get("step_number") { Some(Json::Number(n, ..)) => n.to_int().to_string(); _ => match step.get("step") { Some(Json::Number(n, ..)) => n.to_int().to_string(); _ => "" } }
+                let phase = match step.get("phase") { Some(Json::String(s)) => s; _ => "" }
+                let activity = match step.get("pupil_activities") { Some(Json::String(s)) => s; _ => "" }
+                let strategy = match step.get("teaching_strategy") { Some(Json::String(s)) => s; _ => "" }
+                let header = if phase != "" { "Step " + step_num + ": " + phase } else { "Step " + step_num }
+                let items : Array[@html.Html] = [@html.h4(style=["margin: 0 0 4px 0"], header)]
+                if activity != "" { items.push(@html.p("Activity: " + activity)) }
+                if strategy != "" { items.push(@html.p("Strategy: " + strategy)) }
+                children.push(@html.div(style=["margin-bottom: 12px", "padding: 12px", "background: #f8f9fa", "border-radius: 6px"], items))
+              }
+              _ => ()
+            }
+          }
+        }
+        _ => ()
+      }
+      // MCQ Questions
+      match obj.get("mcq_questions") {
+        Some(Json::Array(arr)) => {
+          let items : Array[@html.Html] = [@html.h3("Revision Questions")]
+          for i = 0; i < arr.length(); i = i + 1 {
+            match arr[i] {
+              Json::Object(q) => {
+                let question = match q.get("question") { Some(Json::String(s)) => s; _ => "" }
+                let q_items : Array[@html.Html] = [@html.p((i + 1).to_string() + ". " + question)]
+                let opts = ["A", "B", "C", "D"]
+                for opt in opts {
+                  match q.get("option_" + opt.to_lower()) {
+                    Some(Json::String(s)) => q_items.push(@html.div(style=["margin-left: 16px"], opt + ". " + s))
+                    _ => ()
+                  }
+                }
+                items.push(@html.div(style=["margin-bottom: 8px", "padding: 8px", "border: 1px solid #dee2e6", "border-radius: 6px"], q_items))
+              }
+              _ => ()
+            }
+          }
+          children.push(@html.div(items))
+        }
+        _ => ()
+      }
+      // Theoretical Questions
+      match obj.get("theoretical_questions") {
+        Some(Json::Array(arr)) => {
+          let items : Array[@html.Html] = [@html.h3("Theory Questions")]
+          for i = 0; i < arr.length(); i = i + 1 {
+            match arr[i] {
+              Json::Object(q) => {
+                let question = match q.get("question") { Some(Json::String(s)) => s; _ => "" }
+                let q_items : Array[@html.Html] = [@html.p((i + 1).to_string() + ". " + question)]
+                match q.get("parts") {
+                  Some(Json::Array(parts)) => for p in parts { match p { Json::String(s) => q_items.push(@html.p(style=["margin-left: 16px"], s)); _ => () } }
+                  _ => ()
+                }
+                items.push(@html.div(style=["margin-bottom: 8px", "padding: 8px", "border: 1px solid #dee2e6", "border-radius: 6px"], q_items))
+              }
+              _ => ()
+            }
+          }
+          children.push(@html.div(items))
+        }
+        _ => ()
+      }
+      // Conclusion
+      match obj.get("conclusion") {
+        Some(Json::String(s)) => { children.push(@html.h3("Conclusion")); children.push(@html.p(s)) }
+        _ => ()
+      }
+    }
+    _ => ()
+  }
+  @html.div(style=["max-width: 800px", "line-height: 1.7"], children)
 }
 
 ///|
