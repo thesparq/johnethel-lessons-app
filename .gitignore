@@ -10,3 +10,4 @@ frontend/.mooncakes/
 history.txt
 ui/dist/
 *.wasm
+.env
