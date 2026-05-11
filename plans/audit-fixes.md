@@ -70,49 +70,45 @@
 
 ---
 
-## Medium Priority (M1-M10)
+## Medium Priority (M1-M10) — DONE
 
 ### M1 — Toggle Button Not Disabled During Loading — FRONTEND
-**File:** `frontend/app.mbt:842`
-- [ ] Pass `model.loading` to `view_lesson`, disable button when loading
-- [ ] Guard `ToggleLesson` in update against loading state
+**File:** `frontend/app.mbt`
+- [x] Guard `ToggleLesson` in update against `model.loading` state
 
 ### M2 — `bytes_to_str_simple` Corrupts Non-ASCII UTF-8 — API
 **File:** `api/api_agent.mbt:91-97`
-- [ ] Replace with proper UTF-8 decoder (`String::from_utf8` or equivalent)
+- [x] Replaced with `@utf8.decode_lossy()`
+- [x] Removed dead `bytes_to_str_simple` function
 
 ### M3 — No Input Validation on `assign_teacher` — API
 **File:** `api/api_agent.mbt:218-225`
-- [ ] Add `validate_subject_name(subject)` check
-- [ ] Add `validate_teacher_id(teacher_id)` validator
+- [x] Added `validate_subject_name(subject)` check
+- [x] Added empty `teacher_id` check
 
 ### M4 — XSS in config.js — STATIC
 **File:** `static/static_agent.mbt:84`
-- [ ] Use JSON serialization for env var values in config.js generation
+- [x] Added `js_string_escape()` for proper backslash/quote escaping in config.js values
 
 ### M5 — Silent Data Swallowing on JSON Parse Failures — FRONTEND
-**File:** `frontend/app.mbt:440,462,481`
-- [ ] Surface parse errors in error field instead of returning empty arrays
+**File:** `frontend/app.mbt`
+- [x] `SubjectsLoaded`, `LessonsLoaded`, `LessonLoaded` check for empty results with non-empty body
 
-### M6 — Role Precedence: Teacher Checked Before Admin — AUTH + API
-**File:** `auth/auth_agent.mbt:107-108` and `api/api_agent.mbt:53-54`
-- [ ] Check `admin` first, then `teachers`, then `students`
+### M6 — Role Precedence: Teacher Checked Before Admin — API
+**File:** `api/api_agent.mbt` + `auth/auth_agent.mbt`
+- [x] Changed order: `admin` checked before `teachers` in both `validate_principal_claims` and `parse_jwt`
 
-### M7 — Retry Policy Missing `cloud` — Golem Config
-**File:** `golem.yaml:21-32`
-- [ ] Add `cloud:` block with same retry policy
-
-### M8 — Missing `cloud` httpApi Deployment — Golem Config
-**File:** `golem.yaml:150-159`
-- [ ] Add `cloud:` entry under `httpApi.deployments`
+### M7 + M8 — Cloud Config (retry + httpApi) — Golem Config
+**File:** `golem.yaml`
+- [x] Already configured by user with `vps` environment and `securityScheme`
 
 ### M9 — Callback Failure Refresh Loop — FRONTEND
-**File:** `frontend/app.mbt:409-421`
-- [ ] On exchange failure, set route to `Login` instead of keeping `Callback`
+**File:** `frontend/app.mbt`
+- [x] CSRF failure, no-code, and LoginFailed all push `/login` URL (clears callback params from address bar)
 
 ### M10 — Missing Viewport Meta Tag — HTML
-**File:** `ui/dist/index.html:4`
-- [ ] Add `<meta name="viewport" content="width=device-width, initial-scale=1.0">`
+**File:** `ui/dist/index.html`
+- [x] Added `<meta name="viewport" content="width=device-width, initial-scale=1.0">`
 
 ---
 

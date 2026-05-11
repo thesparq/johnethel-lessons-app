@@ -70,6 +70,16 @@ fn mime_type(path : String) -> String {
   }
 }
 
+fn js_string_escape(s : String) -> String {
+  let chars = s.to_array()
+  let mut r = ""
+  for i = 0; i < chars.length(); i = i + 1 {
+    let c = chars[i]
+    if c == '"' { r = r + "\\\"" } else if c == '\\' { r = r + "\\\\" } else { r = r + c.to_string() }
+  }
+  r
+}
+
 ///|
 /// Serve static files. Falls back to index.html for SPA routing.
 /// Special handling for /config.js — generated from env vars.
@@ -84,7 +94,7 @@ pub fn FileServerAgent::download_file(
     let auth_url = get_env_s("AUTHENTIK_URL", "")
     let client_id = get_env_s("AUTHENTIK_CLIENT_ID", "")
     let api_url = get_env_s("API_URL", "http://johnethel-lessons-app.localhost:9006")
-    let script = "window.__CONFIG__={authentikUrl:\"" + auth_url + "\",clientId:\"" + client_id + "\",apiUrl:\"" + api_url + "\"};"
+    let script = "window.__CONFIG__={authentikUrl:\"" + js_string_escape(auth_url) + "\",clientId:\"" + js_string_escape(client_id) + "\",apiUrl:\"" + js_string_escape(api_url) + "\"};"
     let bytes = str_to_fixed_bytes(script)
     return @types.UnstructuredBinary::from_inline(bytes, mime_type="application/javascript")
   }

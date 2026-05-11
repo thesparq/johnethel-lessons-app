@@ -571,12 +571,12 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
           let returned_state = js_get_query_param("state")
           let stored_state = js_session_get("oauth_state")
           if stored_state != "" && returned_state != stored_state {
-            (@cmd.none, { ..model, route: Login, loading: false, error: "CSRF check failed: state mismatch" })
+            (@nav.push_url("/login"), { ..model, route: Login, loading: false, error: "CSRF check failed: state mismatch" })
           } else if code != "" {
             let cmd = exchange_cmd(emit, code)
             (cmd, { ..model, route, loading: true, error: "" })
           } else {
-            (@cmd.none, { ..model, route: Login, loading: false, error: "No authorization code received" })
+            (@nav.push_url("/login"), { ..model, route: Login, loading: false, error: "No authorization code received" })
           }
         }
         _ => match (model.token == "", route) {
@@ -604,24 +604,41 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     }
     SubjectsLoaded(body) => {
       let subjects = parse_subjects(body)
-      (@cmd.none, { ..model, subjects, loading: false, error: "" })
+      if subjects.length() == 0 && body != "" && body != "[]" {
+        (@cmd.none, { ..model, loading: false, error: "Failed to parse subjects data" })
+      } else {
+        (@cmd.none, { ..model, subjects, loading: false, error: "" })
+      }
     }
     SubjectsFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load subjects: " + err })
     LessonsLoaded(body) => {
       let lessons = parse_lessons(body)
-      (@cmd.none, { ..model, lessons, loading: false, error: "" })
+      if lessons.length() == 0 && body != "" && body != "[]" {
+        (@cmd.none, { ..model, loading: false, error: "Failed to parse lessons data" })
+      } else {
+        (@cmd.none, { ..model, lessons, loading: false, error: "" })
+      }
     }
     LessonsFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load lessons: " + err })
     LessonLoaded(body) => {
       let lesson = parse_lesson_content(body)
-      (@cmd.none, { ..model, current_lesson: lesson, loading: false, error: "" })
+      match lesson {
+        None => if body != "" && body != "[]" {
+          (@cmd.none, { ..model, loading: false, error: "Failed to parse lesson data" })
+        } else {
+          (@cmd.none, { ..model, current_lesson: None, loading: false, error: "" })
+        }
+        _ => (@cmd.none, { ..model, current_lesson: lesson, loading: false, error: "" })
+      }
     }
     LessonFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load lesson: " + err })
     ToggleLesson(id) =>
-      (post_cmd(emit, api_base() + "/lessons/" + id + "/toggle", model.token), { ..model, loading: true })
+      if model.loading { (@cmd.none, model) } else {
+        (post_cmd(emit, api_base() + "/lessons/" + id + "/toggle", model.token), { ..model, loading: true })
+      }
     ToggleResult(_) => {
       let cmd = match model.current_lesson {
         Some(lesson) =>
@@ -671,7 +688,7 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     LoginFailed(err) => {
       js_session_set("pkce_verifier", "")
       js_session_set("oauth_state", "")
-      (@cmd.none, { ..model, loading: false, error: "Login failed: " + err })
+      (@nav.push_url("/login"), { ..model, loading: false, error: "Login failed: " + err, route: Login })
     }
     AuthExpired => {
       js_local_storage_remove("jwt_token")
