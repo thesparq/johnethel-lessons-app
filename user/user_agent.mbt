@@ -161,7 +161,6 @@ fn surrealdb_query(sql : String) -> Result[Json, String] {
           for i = 0; i < all_bytes.length(); i = i + 1 { bytes[i] = all_bytes[i] }
           stream.drop()
           let _ = @httpTypes.IncomingBody::finish(incoming_body)
-          let body_str = bytes_to_str(bytes)
           if status >= 200 && status < 300 {
             let body_str = bytes_to_str(bytes)
             let json = @json.parse(body_str) catch {

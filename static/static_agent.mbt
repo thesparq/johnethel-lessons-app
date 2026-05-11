@@ -10,9 +10,7 @@ fn FileServerAgent::new() -> FileServerAgent {
 }
 
 ///|
-/// Read full file contents via chunked reads.
-/// Returns empty bytes if file does not exist (caller checks length for fallback).
-/// WORKAROUND REMOVED: Golem 1.5.1 fixes the 64KB read limit.
+/// Read full file contents. Returns empty bytes if file does not exist.
 fn read_file_bytes(path : String) -> Bytes {
   let root = match @fs.get_root_dir() {
     Some(r) => r
