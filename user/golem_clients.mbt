@@ -596,45 +596,29 @@ pub fn UserAgentClient::schedule_cancelable_http_config(
 }
 
 ///|
-pub fn UserAgentClient::http_classes(
-  self : UserAgentClient,
-  auth_header : String?,
-) -> String raise @common.AgentError {
-  let result = self
-    .client
-    .invoke_and_await(
-      "http_classes",
-      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
-    )
+pub fn UserAgentClient::http_classes(self : UserAgentClient) -> String raise @common.AgentError {
+  let result = 
+    self.client.invoke_and_await("http_classes", @rpcTypes.DataValue::Tuple([]))
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
 }
 
 ///|
-pub fn UserAgentClient::trigger_http_classes(
-  self : UserAgentClient,
-  auth_header : String?,
-) -> Unit raise @common.AgentError {
-  self
-    .client
-    .invoke(
-      "http_classes",
-      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
-    )
+pub fn UserAgentClient::trigger_http_classes(self : UserAgentClient) -> Unit {
+  self.client.invoke("http_classes", @rpcTypes.DataValue::Tuple([]))
 }
 
 ///|
 pub fn UserAgentClient::schedule_http_classes(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
-  auth_header : String?,
-) -> Unit raise @common.AgentError {
+) -> Unit {
   self
     .client
     .schedule_invocation(
       scheduled_at,
       "http_classes",
-      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
+      @rpcTypes.DataValue::Tuple([]),
     )
 }
 
@@ -642,14 +626,13 @@ pub fn UserAgentClient::schedule_http_classes(
 pub fn UserAgentClient::schedule_cancelable_http_classes(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
-  auth_header : String?,
-) -> @agentHost.CancellationToken raise @common.AgentError {
+) -> @agentHost.CancellationToken {
   self
     .client
     .schedule_cancelable_invocation(
       scheduled_at,
       "http_classes",
-      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
+      @rpcTypes.DataValue::Tuple([]),
     )
 }
 
@@ -657,16 +640,12 @@ pub fn UserAgentClient::schedule_cancelable_http_classes(
 pub fn UserAgentClient::http_subjects(
   self : UserAgentClient,
   class_level : String,
-  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
     .invoke_and_await(
       "http_subjects",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(class_level),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
     )
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
@@ -676,16 +655,12 @@ pub fn UserAgentClient::http_subjects(
 pub fn UserAgentClient::trigger_http_subjects(
   self : UserAgentClient,
   class_level : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .invoke(
       "http_subjects",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(class_level),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
     )
 }
 
@@ -694,17 +669,13 @@ pub fn UserAgentClient::schedule_http_subjects(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
   class_level : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .schedule_invocation(
       scheduled_at,
       "http_subjects",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(class_level),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
     )
 }
 
@@ -713,17 +684,13 @@ pub fn UserAgentClient::schedule_cancelable_http_subjects(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
   class_level : String,
-  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
     .schedule_cancelable_invocation(
       scheduled_at,
       "http_subjects",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(class_level),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
     )
 }
 
@@ -732,7 +699,6 @@ pub fn UserAgentClient::http_terms(
   self : UserAgentClient,
   class_level : String,
   subject : String,
-  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -741,7 +707,6 @@ pub fn UserAgentClient::http_terms(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(subject),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
   let elements = @extractor.extract_tuple(result)
@@ -753,7 +718,6 @@ pub fn UserAgentClient::trigger_http_terms(
   self : UserAgentClient,
   class_level : String,
   subject : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -762,7 +726,6 @@ pub fn UserAgentClient::trigger_http_terms(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(subject),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
 }
@@ -773,7 +736,6 @@ pub fn UserAgentClient::schedule_http_terms(
   scheduled_at : @wallClock.Datetime,
   class_level : String,
   subject : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -783,7 +745,6 @@ pub fn UserAgentClient::schedule_http_terms(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(subject),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
 }
@@ -794,7 +755,6 @@ pub fn UserAgentClient::schedule_cancelable_http_terms(
   scheduled_at : @wallClock.Datetime,
   class_level : String,
   subject : String,
-  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -804,7 +764,6 @@ pub fn UserAgentClient::schedule_cancelable_http_terms(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(subject),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
 }
@@ -815,7 +774,6 @@ pub fn UserAgentClient::http_lessons(
   subject_id : String,
   class_level : String,
   term : String,
-  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -825,7 +783,6 @@ pub fn UserAgentClient::http_lessons(
         @schema.to_element_value_as(subject_id),
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(term),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
   let elements = @extractor.extract_tuple(result)
@@ -838,7 +795,6 @@ pub fn UserAgentClient::trigger_http_lessons(
   subject_id : String,
   class_level : String,
   term : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -848,7 +804,6 @@ pub fn UserAgentClient::trigger_http_lessons(
         @schema.to_element_value_as(subject_id),
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(term),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
 }
@@ -860,7 +815,6 @@ pub fn UserAgentClient::schedule_http_lessons(
   subject_id : String,
   class_level : String,
   term : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -871,7 +825,6 @@ pub fn UserAgentClient::schedule_http_lessons(
         @schema.to_element_value_as(subject_id),
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(term),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
 }
@@ -883,7 +836,6 @@ pub fn UserAgentClient::schedule_cancelable_http_lessons(
   subject_id : String,
   class_level : String,
   term : String,
-  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -894,25 +846,17 @@ pub fn UserAgentClient::schedule_cancelable_http_lessons(
         @schema.to_element_value_as(subject_id),
         @schema.to_element_value_as(class_level),
         @schema.to_element_value_as(term),
-        @schema.to_element_value_as(auth_header),
       ]),
     )
 }
 
 ///|
-pub fn UserAgentClient::http_lesson(
-  self : UserAgentClient,
-  lesson_id : String,
-  auth_header : String?,
-) -> String raise @common.AgentError {
+pub fn UserAgentClient::http_lesson(self : UserAgentClient, lesson_id : String) -> String raise @common.AgentError {
   let result = self
     .client
     .invoke_and_await(
       "http_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
@@ -922,16 +866,12 @@ pub fn UserAgentClient::http_lesson(
 pub fn UserAgentClient::trigger_http_lesson(
   self : UserAgentClient,
   lesson_id : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .invoke(
       "http_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
 }
 
@@ -940,17 +880,13 @@ pub fn UserAgentClient::schedule_http_lesson(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .schedule_invocation(
       scheduled_at,
       "http_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
 }
 
@@ -959,17 +895,13 @@ pub fn UserAgentClient::schedule_cancelable_http_lesson(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
     .schedule_cancelable_invocation(
       scheduled_at,
       "http_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
 }
 
@@ -977,16 +909,12 @@ pub fn UserAgentClient::schedule_cancelable_http_lesson(
 pub fn UserAgentClient::http_toggle_lesson(
   self : UserAgentClient,
   lesson_id : String,
-  auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
     .client
     .invoke_and_await(
       "http_toggle_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
   let elements = @extractor.extract_tuple(result)
   @schema.from_element_value_as(elements[0])
@@ -996,16 +924,12 @@ pub fn UserAgentClient::http_toggle_lesson(
 pub fn UserAgentClient::trigger_http_toggle_lesson(
   self : UserAgentClient,
   lesson_id : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .invoke(
       "http_toggle_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
 }
 
@@ -1014,17 +938,13 @@ pub fn UserAgentClient::schedule_http_toggle_lesson(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .schedule_invocation(
       scheduled_at,
       "http_toggle_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
 }
 
@@ -1033,17 +953,13 @@ pub fn UserAgentClient::schedule_cancelable_http_toggle_lesson(
   self : UserAgentClient,
   scheduled_at : @wallClock.Datetime,
   lesson_id : String,
-  auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
     .schedule_cancelable_invocation(
       scheduled_at,
       "http_toggle_lesson",
-      @rpcTypes.DataValue::Tuple([
-        @schema.to_element_value_as(lesson_id),
-        @schema.to_element_value_as(auth_header),
-      ]),
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(lesson_id)]),
     )
 }
 

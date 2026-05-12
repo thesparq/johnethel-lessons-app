@@ -258,23 +258,14 @@ fn init{
             {
               http_method: @common.HttpMethod::Get,
               path_suffix: [@common.PathSegment::Literal("classes")],
-              header_vars: [
-                { header_name: "Authorization", variable_name: "auth_header" },
-              ],
+              header_vars: [],
               query_vars: [],
-              auth_details: None,
+              auth_details: Some({ required: true, }),
               cors_options: { allowed_patterns: [], },
             },
           ],
           prompt_hint: None,
-          input_schema: @rpcTypes.DataSchema::Tuple([
-            (
-              "auth_header",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
-              ),
-            ),
-          ]),
+          input_schema: @rpcTypes.DataSchema::Tuple([]),
           output_schema: @rpcTypes.DataSchema::Tuple([
             (
               "result",
@@ -291,13 +282,11 @@ fn init{
             {
               http_method: @common.HttpMethod::Get,
               path_suffix: [@common.PathSegment::Literal("subjects")],
-              header_vars: [
-                { header_name: "Authorization", variable_name: "auth_header" },
-              ],
+              header_vars: [],
               query_vars: [
                 { query_param_name: "class", variable_name: "class_level" },
               ],
-              auth_details: None,
+              auth_details: Some({ required: true, }),
               cors_options: { allowed_patterns: [], },
             },
           ],
@@ -307,12 +296,6 @@ fn init{
               "class_level",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "auth_header",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -332,14 +315,12 @@ fn init{
             {
               http_method: @common.HttpMethod::Get,
               path_suffix: [@common.PathSegment::Literal("terms")],
-              header_vars: [
-                { header_name: "Authorization", variable_name: "auth_header" },
-              ],
+              header_vars: [],
               query_vars: [
                 { query_param_name: "class", variable_name: "class_level" },
                 { query_param_name: "subject", variable_name: "subject" },
               ],
-              auth_details: None,
+              auth_details: Some({ required: true, }),
               cors_options: { allowed_patterns: [], },
             },
           ],
@@ -355,12 +336,6 @@ fn init{
               "subject",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "auth_header",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -386,14 +361,12 @@ fn init{
                 }),
                 @common.PathSegment::Literal("lessons"),
               ],
-              header_vars: [
-                { header_name: "Authorization", variable_name: "auth_header" },
-              ],
+              header_vars: [],
               query_vars: [
                 { query_param_name: "class", variable_name: "class_level" },
                 { query_param_name: "term", variable_name: "term" },
               ],
-              auth_details: None,
+              auth_details: Some({ required: true, }),
               cors_options: { allowed_patterns: [], },
             },
           ],
@@ -415,12 +388,6 @@ fn init{
               "term",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "auth_header",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -445,11 +412,9 @@ fn init{
                   variable_name: "lesson_id",
                 }),
               ],
-              header_vars: [
-                { header_name: "Authorization", variable_name: "auth_header" },
-              ],
+              header_vars: [],
               query_vars: [],
-              auth_details: None,
+              auth_details: Some({ required: true, }),
               cors_options: { allowed_patterns: [], },
             },
           ],
@@ -459,12 +424,6 @@ fn init{
               "lesson_id",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "auth_header",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -490,11 +449,9 @@ fn init{
                 }),
                 @common.PathSegment::Literal("toggle"),
               ],
-              header_vars: [
-                { header_name: "Authorization", variable_name: "auth_header" },
-              ],
+              header_vars: [],
               query_vars: [],
-              auth_details: None,
+              auth_details: Some({ required: true, }),
               cors_options: { allowed_patterns: [], },
             },
           ],
@@ -504,12 +461,6 @@ fn init{
               "lesson_id",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
-              ),
-            ),
-            (
-              "auth_header",
-              @schema.schema_of_tag(
-                (@schema.TypeTag::{  } : @schema.TypeTag[String?]),
               ),
             ),
           ]),
@@ -673,16 +624,26 @@ impl @agents.RawAgent for UserAgent with invoke(
       }
       "http_classes" => {
         let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 0 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 0 elements, got " + elements.length().to_string(),
+          )
+        }
+        let result = self.http_classes()
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
+      }
+      "http_subjects" => {
+        let elements = @extractor.extract_tuple(input)
         guard elements.length() == 1 else {
           raise  @common.AgentError::InvalidInput(
             "Expected 1 elements, got " + elements.length().to_string(),
           )
         }
-        let auth_header :String? = @schema.from_element_value_as(elements[0])
-        let result = self.http_classes(auth_header)
+        let class_level :String = @schema.from_element_value_as(elements[0])
+        let result = self.http_subjects(class_level)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
-      "http_subjects" => {
+      "http_terms" => {
         let elements = @extractor.extract_tuple(input)
         guard elements.length() == 2 else {
           raise  @common.AgentError::InvalidInput(
@@ -690,60 +651,43 @@ impl @agents.RawAgent for UserAgent with invoke(
           )
         }
         let class_level :String = @schema.from_element_value_as(elements[0])
-        let auth_header :String? = @schema.from_element_value_as(elements[1])
-        let result = self.http_subjects(class_level, auth_header)
+        let subject :String = @schema.from_element_value_as(elements[1])
+        let result = self.http_terms(class_level, subject)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
-      "http_terms" => {
+      "http_lessons" => {
         let elements = @extractor.extract_tuple(input)
         guard elements.length() == 3 else {
           raise  @common.AgentError::InvalidInput(
             "Expected 3 elements, got " + elements.length().to_string(),
           )
         }
-        let class_level :String = @schema.from_element_value_as(elements[0])
-        let subject :String = @schema.from_element_value_as(elements[1])
-        let auth_header :String? = @schema.from_element_value_as(elements[2])
-        let result = self.http_terms(class_level, subject, auth_header)
-        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
-      }
-      "http_lessons" => {
-        let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 4 else {
-          raise  @common.AgentError::InvalidInput(
-            "Expected 4 elements, got " + elements.length().to_string(),
-          )
-        }
         let subject_id :String = @schema.from_element_value_as(elements[0])
         let class_level :String = @schema.from_element_value_as(elements[1])
         let term :String = @schema.from_element_value_as(elements[2])
-        let auth_header :String? = @schema.from_element_value_as(elements[3])
-        let result = 
-          self.http_lessons(subject_id, class_level, term, auth_header)
+        let result = self.http_lessons(subject_id, class_level, term)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       "http_lesson" => {
         let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 2 else {
+        guard elements.length() == 1 else {
           raise  @common.AgentError::InvalidInput(
-            "Expected 2 elements, got " + elements.length().to_string(),
+            "Expected 1 elements, got " + elements.length().to_string(),
           )
         }
         let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let auth_header :String? = @schema.from_element_value_as(elements[1])
-        let result = self.http_lesson(lesson_id, auth_header)
+        let result = self.http_lesson(lesson_id)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       "http_toggle_lesson" => {
         let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 2 else {
+        guard elements.length() == 1 else {
           raise  @common.AgentError::InvalidInput(
-            "Expected 2 elements, got " + elements.length().to_string(),
+            "Expected 1 elements, got " + elements.length().to_string(),
           )
         }
         let lesson_id :String = @schema.from_element_value_as(elements[0])
-        let auth_header :String? = @schema.from_element_value_as(elements[1])
-        let result = self.http_toggle_lesson(lesson_id, auth_header)
+        let result = self.http_toggle_lesson(lesson_id)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       other => Err(@common.AgentError::InvalidMethod(other))
