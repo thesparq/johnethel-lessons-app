@@ -914,7 +914,7 @@ fn view_class(emit : @cmd.Emit[Msg], model : Model, class_id : String) -> @html.
             @html.li(
               style=["margin: 8px 0"],
               [@html.a(
-                href="/class/" + class_id + "/" + s.name,
+                href="/class/" + class_id + "/" + js_url_encode(s.name),
                 style=["display: block", "padding: 12px 16px", "background: #f8f9fa", "border-radius: 6px", "text-decoration: none", "color: #333"],
                 s.name,
               )],
@@ -942,7 +942,7 @@ fn view_subject(emit : @cmd.Emit[Msg], model : Model, class_id : String, subject
           model.terms.map(fn(term) {
             @html.li(
               [@html.a(
-                href="/class/" + class_id + "/" + subject_id + "/" + term,
+                href="/class/" + class_id + "/" + js_url_encode(subject_id) + "/" + term,
                 style=["display: block", "padding: 16px 24px", "background: #f0f4ff", "border-radius: 8px", "text-decoration: none", "color: #333", "font-weight: 500"],
                 term + " Term",
               )],
