@@ -510,6 +510,7 @@ pub fn UserAgent::http_config(self : Self) -> String {
 /// Return classes (whitelist filtered in frontend).
 #derive.endpoint(get="/classes")
 #derive.endpoint_auth(true)
+#derive.endpoint_cors("*")
 pub fn UserAgent::http_classes(self : Self) -> String {
   if !auth_ok(self) { return auth_error() }
   self.get_classes("")
@@ -519,6 +520,8 @@ pub fn UserAgent::http_classes(self : Self) -> String {
 /// Return subjects for a class.
 #derive.endpoint(get="/subjects?class={class_level}")
 #derive.endpoint_auth(true)
+#derive.endpoint_cors("*")
+
 pub fn UserAgent::http_subjects(self : Self, class_level : String) -> String {
   if !auth_ok(self) { return auth_error() }
   self.get_subjects(class_level)
@@ -528,6 +531,8 @@ pub fn UserAgent::http_subjects(self : Self, class_level : String) -> String {
 /// Return terms for a class + subject.
 #derive.endpoint(get="/terms?class={class_level}&subject={subject}")
 #derive.endpoint_auth(true)
+#derive.endpoint_cors("*")
+
 pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String) -> String {
   if !auth_ok(self) { return auth_error() }
   if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
@@ -538,6 +543,8 @@ pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String
 /// List lessons for a subject.
 #derive.endpoint(get="/subjects/{subject_id}/lessons?class={class_level}&term={term}")
 #derive.endpoint_auth(true)
+#derive.endpoint_cors("*")
+
 pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : String, term : String) -> String {
   if !auth_ok(self) { return auth_error() }
   if !validate_subject_name(subject_id) { return "{\"error\":\"Invalid subject name\"}" }
@@ -548,6 +555,8 @@ pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : S
 /// Get full lesson content.
 #derive.endpoint(get="/lessons/{lesson_id}")
 #derive.endpoint_auth(true)
+#derive.endpoint_cors("*")
+
 pub fn UserAgent::http_lesson(self : Self, lesson_id : String) -> String {
   if !auth_ok(self) { return auth_error() }
   if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
@@ -558,6 +567,8 @@ pub fn UserAgent::http_lesson(self : Self, lesson_id : String) -> String {
 /// Toggle lesson active state (teacher or admin only).
 #derive.endpoint(post="/lessons/{lesson_id}/toggle")
 #derive.endpoint_auth(true)
+#derive.endpoint_cors("*")
+
 pub fn UserAgent::http_toggle_lesson(self : Self, lesson_id : String) -> String {
   if !auth_ok(self) { return auth_error() }
   if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
