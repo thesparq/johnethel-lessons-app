@@ -68,7 +68,7 @@ fn init{
     name: "UserAgent",
     agent_type: {
       type_name: "UserAgent",
-      description: "User agent — durable per-user instance with caching and HTTP endpoints.  Auth via Principal from Golem gateway security scheme.",
+      description: "User agent — durable per-user instance with caching and HTTP endpoints.  Only authenticated users (via OIDC Principal) can access protected endpoints. Anonymous requests are rejected (except /config which has endpoint_auth(false)).",
       source_language: "moonbit",
       constructor_: {
         name: Some("new"),

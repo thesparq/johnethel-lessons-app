@@ -1,6 +1,7 @@
 ///|
 /// User agent — durable per-user instance with caching and HTTP endpoints.
-/// Auth via Principal from Golem gateway security scheme.
+/// Only authenticated users (via OIDC Principal) can access protected endpoints.
+/// Anonymous requests are rejected (except /config which has endpoint_auth(false)).
 #derive.agent
 #derive.mount("/")
 #derive.mount_cors("*")
@@ -19,7 +20,7 @@ fn UserAgent::new(principal : @common.Principal) -> UserAgent {
 fn role_of(p : @common.Principal) -> String {
   match p {
     @common.Principal::Oidc(oidc) => {
-      let json = @json.parse(oidc.claims) catch { _ => return "student" }
+      let json = @json.parse(oidc.claims) catch { _ => return "anonymous" }
       match json {
         Json::Object(obj) => match obj.get("groups") {
           Some(Json::Array(groups)) => {
@@ -28,20 +29,28 @@ fn role_of(p : @common.Principal) -> String {
             for g in groups { match g { Json::String("students") => return "student"; _ => () } }
             "anonymous"
           }
-          _ => "student"
+          _ => "anonymous"
         }
-        _ => "student"
+        _ => "anonymous"
       }
     }
-    _ => "student"
+    @common.Principal::Anonymous | @common.Principal::Agent(_) | @common.Principal::GolemUser(_) => "anonymous"
   }
 }
 
 ///|
 fn user_of(p : @common.Principal) -> String {
   match p {
-    @common.Principal::Oidc(oidc) => oidc.sub
+    @common.Principal::Oidc(oidc) => if oidc.sub != "" { oidc.sub } else { "anonymous" }
     _ => "anonymous"
+  }
+}
+
+///|
+fn auth_ok(p : @common.Principal, h : String?) -> Bool {
+  match h {
+    Some(header) => header != ""
+    None => false
   }
 }
 
@@ -494,11 +503,6 @@ pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
 
 ///|
 fn auth_header_str(h : String?) -> String { h.unwrap_or("") }
-
-///|
-fn auth_ok(p : @common.Principal, h : String?) -> Bool {
-  role_of(p) != "anonymous"
-}
 
 ///|
 fn auth_error() -> String { "{\"error\":\"Unauthorized: invalid token\"}" }
