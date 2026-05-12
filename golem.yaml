@@ -98,6 +98,8 @@ components:
         dir: ..
     componentWasm: ../_build/wasm/debug/user.agent.wasm
     env:
+      AUTHENTIK_URL: "{{ AUTHENTIK_URL }}"
+      AUTHENTIK_CLIENT_ID: "{{ AUTHENTIK_CLIENT_ID }}"
       SURREALDB_URL: "{{ SURREALDB_URL }}"
       SURREALDB_NS: "{{ SURREALDB_NS }}"
       SURREALDB_DB: "{{ SURREALDB_DB }}"
@@ -161,8 +163,7 @@ httpApi:
     local:
       - domain: johnethel-lessons-app.localhost:9006
         agents:
-          ApiAgent:
-            securityScheme: johnethel-auth
+          UserAgent: {}
       - domain: johnethel-lessons-static.localhost:9006
         agents:
           FileServerAgent: {}
