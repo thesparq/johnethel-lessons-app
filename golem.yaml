@@ -161,8 +161,7 @@ httpApi:
     local:
       - domain: johnethel-lessons-app.localhost:9006
         agents:
-          ApiAgent:
-            securityScheme: johnethel-auth
+          ApiAgent: {}
       - domain: johnethel-lessons-static.localhost:9006
         agents:
           FileServerAgent: {}

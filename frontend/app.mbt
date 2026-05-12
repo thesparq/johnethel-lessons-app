@@ -841,6 +841,9 @@ fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 }
 
 ///|
+let allowed_classes : Array[String] = ["JSS_1", "JSS_2", "JSS_3", "SS1", "SS2", "SS3", "PRIMARY_1", "PRIMARY_2", "PRIMARY_3", "PRIMARY_4", "PRIMARY_5"]
+
+///|
 fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   let _ = emit
   @html.div(
@@ -852,7 +855,7 @@ fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
       } else {
         @html.ul(
           style=["list-style: none", "padding: 0", "display: grid", "grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))", "gap: 12px"],
-          model.classes.map(fn(cl) {
+          model.classes.filter(fn(cl) { allowed_classes.contains(cl) }).map(fn(cl) {
             let label = match cl {
               "JSS_1" => "JSS 1"
               "JSS_2" => "JSS 2"
@@ -860,6 +863,11 @@ fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
               "SS1" => "SS 1"
               "SS2" => "SS 2"
               "SS3" => "SS 3"
+              "PRIMARY_1" => "Primary 1"
+              "PRIMARY_2" => "Primary 2"
+              "PRIMARY_3" => "Primary 3"
+              "PRIMARY_4" => "Primary 4"
+              "PRIMARY_5" => "Primary 5"
               _ => cl
             }
             @html.li(

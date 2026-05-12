@@ -291,7 +291,7 @@ pub fn UserAgent::get_classes(self : Self, class_level : String) -> String {
   let sql = if class_level != "" {
     "SELECT class_level FROM lesson_content WHERE class_level = '" + class_level + "' GROUP BY class_level ORDER BY class_level;"
   } else {
-    "SELECT class_level FROM lesson_content WHERE class_level CONTAINS 'JSS' OR class_level CONTAINS 'SS' GROUP BY class_level ORDER BY class_level;"
+    "SELECT class_level FROM lesson_content WHERE class_level != '' GROUP BY class_level ORDER BY class_level;"
   }
   match query_result(sql) {
     Ok(result) => {
