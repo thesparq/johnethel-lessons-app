@@ -652,10 +652,20 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       (@cmd.none, { ..model, loading: false, error: "Failed to load classes: " + err })
     SubjectsLoaded(body) => {
       let subjects = parse_subjects(body)
+      // Deduplicate by case-insensitive name
+      let seen : Map[String, Bool] = {}
+      let deduped : Array[SubjectInfo] = []
+      for s in subjects {
+        let key = s.name.to_lower()
+        match seen.get(key) {
+          Some(_) => ()
+          None => { seen[key] = true; deduped.push(s) }
+        }
+      }
       if subjects.length() == 0 && body != "" && body != "[]" {
         (@cmd.none, { ..model, loading: false, error: "Failed to parse subjects data" })
       } else {
-        (@cmd.none, { ..model, subjects, loading: false, error: "" })
+        (@cmd.none, { ..model, subjects: deduped, loading: false, error: "" })
       }
     }
     SubjectsFailed(err) =>
@@ -844,6 +854,24 @@ fn view_login(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 let allowed_classes : Array[String] = ["JSS_1", "JSS_2", "JSS_3", "SS1", "SS2", "SS3", "PRIMARY_1", "PRIMARY_2", "PRIMARY_3", "PRIMARY_4", "PRIMARY_5"]
 
 ///|
+fn format_class_name(cl : String) -> String {
+  match cl {
+    "JSS_1" => "JSS 1"
+    "JSS_2" => "JSS 2"
+    "JSS_3" => "JSS 3"
+    "SS1" => "SS 1"
+    "SS2" => "SS 2"
+    "SS3" => "SS 3"
+    "PRIMARY_1" => "Primary 1"
+    "PRIMARY_2" => "Primary 2"
+    "PRIMARY_3" => "Primary 3"
+    "PRIMARY_4" => "Primary 4"
+    "PRIMARY_5" => "Primary 5"
+    _ => cl
+  }
+}
+
+///|
 fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   let _ = emit
   @html.div(
@@ -856,20 +884,7 @@ fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
         @html.ul(
           style=["list-style: none", "padding: 0", "display: grid", "grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))", "gap: 12px"],
           model.classes.filter(fn(cl) { allowed_classes.contains(cl) }).map(fn(cl) {
-            let label = match cl {
-              "JSS_1" => "JSS 1"
-              "JSS_2" => "JSS 2"
-              "JSS_3" => "JSS 3"
-              "SS1" => "SS 1"
-              "SS2" => "SS 2"
-              "SS3" => "SS 3"
-              "PRIMARY_1" => "Primary 1"
-              "PRIMARY_2" => "Primary 2"
-              "PRIMARY_3" => "Primary 3"
-              "PRIMARY_4" => "Primary 4"
-              "PRIMARY_5" => "Primary 5"
-              _ => cl
-            }
+            let label = format_class_name(cl)
             @html.li(
               [@html.a(
                 href="/class/" + cl,
@@ -890,7 +905,7 @@ fn view_class(emit : @cmd.Emit[Msg], model : Model, class_id : String) -> @html.
   @html.div(
     [
       @html.a(href="/", style=["color: #666"], "\u2190 Back to classes"),
-      @html.h1("Subjects for " + class_id),
+      @html.h1("Subjects for " + format_class_name(class_id)),
       if model.subjects.length() == 0 {
         @html.p("No subjects found for this class.")
       } else {
@@ -919,7 +934,7 @@ fn view_subject(emit : @cmd.Emit[Msg], model : Model, class_id : String, subject
     [
       @html.a(href="/class/" + class_id, style=["color: #666"], "\u2190 Back to subjects"),
       @html.h1(js_url_decode(subject_id)),
-      @html.p(style=["color: #666"], "Class: " + class_id),
+      @html.p(style=["color: #666"], "Class: " + format_class_name(class_id)),
       if model.terms.length() == 0 {
         @html.p("No terms found for this subject.")
       } else {
@@ -953,7 +968,7 @@ fn view_term(emit : @cmd.Emit[Msg], model : Model, class_id : String, subject_id
     [
       @html.a(href="/class/" + class_id + "/" + subject_id, style=["color: #666"], "\u2190 Back to terms"),
       @html.h1("Lessons for " + js_url_decode(subject_id)),
-      @html.p(style=["color: #666"], "Class: " + class_id + " \u00b7 " + term_id + " Term"),
+      @html.p(style=["color: #666"], "Class: " + format_class_name(class_id) + " \u00b7 " + term_id + " Term"),
       if visible_lessons.length() == 0 {
         let msg = if is_teacher {
           "No lessons found for this term."
