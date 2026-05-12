@@ -442,9 +442,13 @@ fn parse_string_array(body : String) -> Array[String] {
         match item {
           Json::String(s) => result.push(s)
           Json::Object(obj) => {
-            let cl = match obj.get("class_level") { Some(Json::String(s)) => s; _ => "" }
-            if cl != "" { result.push(cl) } else {
-              match obj.get("term") { Some(Json::String(s)) => result.push(s); _ => () }
+            let mut pushed = false
+            for pair in obj {
+              match pair.1 {
+                Json::String(s) => { result.push(s); pushed = true }
+                _ => ()
+              }
+              if pushed { break }
             }
           }
           _ => ()
