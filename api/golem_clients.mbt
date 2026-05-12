@@ -198,14 +198,11 @@ pub fn ApiAgentClient::schedule_cancelable_get_config(
 }
 
 ///|
-pub fn ApiAgentClient::get_subjects(
-  self : ApiAgentClient,
-  auth_header : String?,
-) -> String raise @common.AgentError {
+pub fn ApiAgentClient::get_classes(self : ApiAgentClient, auth_header : String?) -> String raise @common.AgentError {
   let result = self
     .client
     .invoke_and_await(
-      "get_subjects",
+      "get_classes",
       @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
     )
   let elements = @extractor.extract_tuple(result)
@@ -213,20 +210,20 @@ pub fn ApiAgentClient::get_subjects(
 }
 
 ///|
-pub fn ApiAgentClient::trigger_get_subjects(
+pub fn ApiAgentClient::trigger_get_classes(
   self : ApiAgentClient,
   auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
     .client
     .invoke(
-      "get_subjects",
+      "get_classes",
       @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
     )
 }
 
 ///|
-pub fn ApiAgentClient::schedule_get_subjects(
+pub fn ApiAgentClient::schedule_get_classes(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   auth_header : String?,
@@ -235,13 +232,13 @@ pub fn ApiAgentClient::schedule_get_subjects(
     .client
     .schedule_invocation(
       scheduled_at,
-      "get_subjects",
+      "get_classes",
       @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
     )
 }
 
 ///|
-pub fn ApiAgentClient::schedule_cancelable_get_subjects(
+pub fn ApiAgentClient::schedule_cancelable_get_classes(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   auth_header : String?,
@@ -250,8 +247,164 @@ pub fn ApiAgentClient::schedule_cancelable_get_subjects(
     .client
     .schedule_cancelable_invocation(
       scheduled_at,
-      "get_subjects",
+      "get_classes",
       @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(auth_header)]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::get_subjects(
+  self : ApiAgentClient,
+  class_level : String,
+  auth_header : String?,
+) -> String raise @common.AgentError {
+  let result = self
+    .client
+    .invoke_and_await(
+      "get_subjects",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn ApiAgentClient::trigger_get_subjects(
+  self : ApiAgentClient,
+  class_level : String,
+  auth_header : String?,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .invoke(
+      "get_subjects",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::schedule_get_subjects(
+  self : ApiAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+  auth_header : String?,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "get_subjects",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::schedule_cancelable_get_subjects(
+  self : ApiAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+  auth_header : String?,
+) -> @agentHost.CancellationToken raise @common.AgentError {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "get_subjects",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::get_terms(
+  self : ApiAgentClient,
+  class_level : String,
+  subject : String,
+  auth_header : String?,
+) -> String raise @common.AgentError {
+  let result = self
+    .client
+    .invoke_and_await(
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn ApiAgentClient::trigger_get_terms(
+  self : ApiAgentClient,
+  class_level : String,
+  subject : String,
+  auth_header : String?,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .invoke(
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::schedule_get_terms(
+  self : ApiAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+  subject : String,
+  auth_header : String?,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+        @schema.to_element_value_as(auth_header),
+      ]),
+    )
+}
+
+///|
+pub fn ApiAgentClient::schedule_cancelable_get_terms(
+  self : ApiAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+  subject : String,
+  auth_header : String?,
+) -> @agentHost.CancellationToken raise @common.AgentError {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+        @schema.to_element_value_as(auth_header),
+      ]),
     )
 }
 
@@ -259,6 +412,8 @@ pub fn ApiAgentClient::schedule_cancelable_get_subjects(
 pub fn ApiAgentClient::get_lessons(
   self : ApiAgentClient,
   subject_id : String,
+  class_level : String,
+  term : String,
   auth_header : String?,
 ) -> String raise @common.AgentError {
   let result = self
@@ -267,6 +422,8 @@ pub fn ApiAgentClient::get_lessons(
       "get_lessons",
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject_id),
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
         @schema.to_element_value_as(auth_header),
       ]),
     )
@@ -278,6 +435,8 @@ pub fn ApiAgentClient::get_lessons(
 pub fn ApiAgentClient::trigger_get_lessons(
   self : ApiAgentClient,
   subject_id : String,
+  class_level : String,
+  term : String,
   auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
@@ -286,6 +445,8 @@ pub fn ApiAgentClient::trigger_get_lessons(
       "get_lessons",
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject_id),
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
         @schema.to_element_value_as(auth_header),
       ]),
     )
@@ -296,6 +457,8 @@ pub fn ApiAgentClient::schedule_get_lessons(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   subject_id : String,
+  class_level : String,
+  term : String,
   auth_header : String?,
 ) -> Unit raise @common.AgentError {
   self
@@ -305,6 +468,8 @@ pub fn ApiAgentClient::schedule_get_lessons(
       "get_lessons",
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject_id),
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
         @schema.to_element_value_as(auth_header),
       ]),
     )
@@ -315,6 +480,8 @@ pub fn ApiAgentClient::schedule_cancelable_get_lessons(
   self : ApiAgentClient,
   scheduled_at : @wallClock.Datetime,
   subject_id : String,
+  class_level : String,
+  term : String,
   auth_header : String?,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
@@ -324,6 +491,8 @@ pub fn ApiAgentClient::schedule_cancelable_get_lessons(
       "get_lessons",
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject_id),
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
         @schema.to_element_value_as(auth_header),
       ]),
     )

@@ -178,26 +178,49 @@ pub fn ApiAgent::get_config(self : Self) -> String {
 }
 
 ///|
-/// List all subjects.
-#derive.endpoint(get="/subjects")
+/// Return classes (home page). Filtered to student's class if set.
+#derive.endpoint(get="/classes")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::get_subjects(self : Self, auth_header : String?) -> String raise @common.AgentError {
+pub fn ApiAgent::get_classes(self : Self, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
   let (user_id, role, class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
+  let filter = if role == "student" || role == "teacher" { class_level } else { "" }
+  user_get_classes(user_id, role, filter)
+}
+
+///|
+/// Return subjects for a class.
+#derive.endpoint(get="/subjects?class={class_level}")
+#derive.endpoint_header("Authorization", "auth_header")
+pub fn ApiAgent::get_subjects(self : Self, class_level : String, auth_header : String?) -> String raise @common.AgentError {
+  let _ = self
+  let (user_id, role, _cl) = auth_user(auth_header.unwrap_or(""), self.principal)
   if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
   user_get_subjects(user_id, role, class_level)
 }
 
 ///|
-/// List lessons for a subject.
-#derive.endpoint(get="/subjects/{subject_id}/lessons")
+/// Return terms for a class + subject.
+#derive.endpoint(get="/terms?class={class_level}&subject={subject}")
 #derive.endpoint_header("Authorization", "auth_header")
-pub fn ApiAgent::get_lessons(self : Self, subject_id : String, auth_header : String?) -> String raise @common.AgentError {
+pub fn ApiAgent::get_terms(self : Self, class_level : String, subject : String, auth_header : String?) -> String raise @common.AgentError {
+  let _ = self
+  let (user_id, role, _cl) = auth_user(auth_header.unwrap_or(""), self.principal)
+  if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
+  user_get_terms(user_id, role, class_level, subject)
+}
+
+///|
+/// List lessons for a subject.
+#derive.endpoint(get="/subjects/{subject_id}/lessons?class={class_level}&term={term}")
+#derive.endpoint_header("Authorization", "auth_header")
+pub fn ApiAgent::get_lessons(self : Self, subject_id : String, class_level : String, term : String, auth_header : String?) -> String raise @common.AgentError {
   let _ = self
   if !validate_subject_name(subject_id) { return auth_error_json("Invalid subject name") }
-  let (user_id, role, class_level) = auth_user(auth_header.unwrap_or(""), self.principal)
+  let (user_id, role, _cl) = auth_user(auth_header.unwrap_or(""), self.principal)
   if user_id == "anonymous" { return auth_error_json("Unauthorized: invalid token") }
-  user_get_lessons(user_id, role, subject_id, class_level)
+  user_get_lessons(user_id, role, subject_id, class_level, term)
 }
 
 ///|

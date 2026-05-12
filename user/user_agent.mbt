@@ -282,6 +282,47 @@ fn validate_subject_name(name : String) -> Bool {
 }
 
 ///|
+pub fn UserAgent::get_classes(self : Self, class_level : String) -> String {
+  let cache_key = "classes:" + class_level
+  match self.cache_get(cache_key) {
+    Some(cached) => return cached
+    None => ()
+  }
+  let sql = if class_level != "" {
+    "SELECT class_level FROM lesson_content WHERE class_level = '" + class_level + "' GROUP BY class_level ORDER BY class_level;"
+  } else {
+    "SELECT class_level FROM lesson_content WHERE class_level CONTAINS 'JSS' OR class_level CONTAINS 'SS' GROUP BY class_level ORDER BY class_level;"
+  }
+  match query_result(sql) {
+    Ok(result) => {
+      let json_str = result.stringify()
+      self.cache_set(cache_key, json_str, 600)
+      json_str
+    }
+    Err(e) => "{\"error\":\"" + e + "\"}"
+  }
+}
+
+///|
+pub fn UserAgent::get_terms(self : Self, class_level : String, subject : String) -> String {
+  if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
+  let cache_key = "terms:" + class_level + ":" + subject
+  match self.cache_get(cache_key) {
+    Some(cached) => return cached
+    None => ()
+  }
+  let sql = "SELECT term FROM lesson_content WHERE class_level = '" + class_level + "' AND subject = '" + subject + "' GROUP BY term ORDER BY term;"
+  match query_result(sql) {
+    Ok(result) => {
+      let json_str = result.stringify()
+      self.cache_set(cache_key, json_str, 600)
+      json_str
+    }
+    Err(e) => "{\"error\":\"" + e + "\"}"
+  }
+}
+
+///|
 pub fn UserAgent::get_subjects(self : Self, class_level : String) -> String {
   let cache_key = "subjects:" + class_level
   match self.cache_get(cache_key) {
@@ -301,15 +342,16 @@ pub fn UserAgent::get_subjects(self : Self, class_level : String) -> String {
 }
 
 ///|
-pub fn UserAgent::get_lessons(self : Self, subject : String, class_level : String) -> String {
+pub fn UserAgent::get_lessons(self : Self, subject : String, class_level : String, term : String) -> String {
   if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
-  let cache_key = "list:" + class_level + ":" + subject
+  let cache_key = "list:" + class_level + ":" + subject + ":" + term
   match self.cache_get(cache_key) {
     Some(cached) => return cached
     None => ()
   }
   let filter = if class_level != "" { " AND class_level = '" + class_level + "' " } else { "" }
-  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "'" + filter + "ORDER BY week;"
+  let term_filter = if term != "" { " AND term = '" + term + "' " } else { "" }
+  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "'" + filter + term_filter + "ORDER BY week;"
   match query_result(sql) {
     Ok(result) => {
       let json_str = if self.role == "student" {

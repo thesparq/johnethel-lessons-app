@@ -189,6 +189,138 @@ pub fn[T] UserAgentClient::scoped_get_phantom(
 }
 
 ///|
+pub fn UserAgentClient::get_classes(
+  self : UserAgentClient,
+  class_level : String,
+) -> String raise @common.AgentError {
+  let result = self
+    .client
+    .invoke_and_await(
+      "get_classes",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
+    )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn UserAgentClient::trigger_get_classes(
+  self : UserAgentClient,
+  class_level : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .invoke(
+      "get_classes",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
+    )
+}
+
+///|
+pub fn UserAgentClient::schedule_get_classes(
+  self : UserAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "get_classes",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
+    )
+}
+
+///|
+pub fn UserAgentClient::schedule_cancelable_get_classes(
+  self : UserAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+) -> @agentHost.CancellationToken raise @common.AgentError {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "get_classes",
+      @rpcTypes.DataValue::Tuple([@schema.to_element_value_as(class_level)]),
+    )
+}
+
+///|
+pub fn UserAgentClient::get_terms(
+  self : UserAgentClient,
+  class_level : String,
+  subject : String,
+) -> String raise @common.AgentError {
+  let result = self
+    .client
+    .invoke_and_await(
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+      ]),
+    )
+  let elements = @extractor.extract_tuple(result)
+  @schema.from_element_value_as(elements[0])
+}
+
+///|
+pub fn UserAgentClient::trigger_get_terms(
+  self : UserAgentClient,
+  class_level : String,
+  subject : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .invoke(
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+      ]),
+    )
+}
+
+///|
+pub fn UserAgentClient::schedule_get_terms(
+  self : UserAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+  subject : String,
+) -> Unit raise @common.AgentError {
+  self
+    .client
+    .schedule_invocation(
+      scheduled_at,
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+      ]),
+    )
+}
+
+///|
+pub fn UserAgentClient::schedule_cancelable_get_terms(
+  self : UserAgentClient,
+  scheduled_at : @wallClock.Datetime,
+  class_level : String,
+  subject : String,
+) -> @agentHost.CancellationToken raise @common.AgentError {
+  self
+    .client
+    .schedule_cancelable_invocation(
+      scheduled_at,
+      "get_terms",
+      @rpcTypes.DataValue::Tuple([
+        @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(subject),
+      ]),
+    )
+}
+
+///|
 pub fn UserAgentClient::get_subjects(
   self : UserAgentClient,
   class_level : String,
@@ -251,6 +383,7 @@ pub fn UserAgentClient::get_lessons(
   self : UserAgentClient,
   subject : String,
   class_level : String,
+  term : String,
 ) -> String raise @common.AgentError {
   let result = self
     .client
@@ -259,6 +392,7 @@ pub fn UserAgentClient::get_lessons(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject),
         @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
       ]),
     )
   let elements = @extractor.extract_tuple(result)
@@ -270,6 +404,7 @@ pub fn UserAgentClient::trigger_get_lessons(
   self : UserAgentClient,
   subject : String,
   class_level : String,
+  term : String,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -278,6 +413,7 @@ pub fn UserAgentClient::trigger_get_lessons(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject),
         @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
       ]),
     )
 }
@@ -288,6 +424,7 @@ pub fn UserAgentClient::schedule_get_lessons(
   scheduled_at : @wallClock.Datetime,
   subject : String,
   class_level : String,
+  term : String,
 ) -> Unit raise @common.AgentError {
   self
     .client
@@ -297,6 +434,7 @@ pub fn UserAgentClient::schedule_get_lessons(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject),
         @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
       ]),
     )
 }
@@ -307,6 +445,7 @@ pub fn UserAgentClient::schedule_cancelable_get_lessons(
   scheduled_at : @wallClock.Datetime,
   subject : String,
   class_level : String,
+  term : String,
 ) -> @agentHost.CancellationToken raise @common.AgentError {
   self
     .client
@@ -316,6 +455,7 @@ pub fn UserAgentClient::schedule_cancelable_get_lessons(
       @rpcTypes.DataValue::Tuple([
         @schema.to_element_value_as(subject),
         @schema.to_element_value_as(class_level),
+        @schema.to_element_value_as(term),
       ]),
     )
 }

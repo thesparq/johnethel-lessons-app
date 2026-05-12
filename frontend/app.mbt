@@ -47,7 +47,9 @@ fn js_session_get(key_ : String) -> String { ignore(key_); "" }
 ///|
 enum Route {
   Home
-  SubjectDetail(String)
+  ClassDetail(String)
+  SubjectDetail(String, String)
+  TermDetail(String, String, String)
   LessonDetail(String)
   Admin
   Login
@@ -85,8 +87,12 @@ struct LessonContent {
 enum Msg {
   UrlChanged(@url.Url)
   UrlRequest(@url.UrlRequest)
+  ClassesLoaded(String)
+  ClassesFailed(String)
   SubjectsLoaded(String)
   SubjectsFailed(String)
+  TermsLoaded(String)
+  TermsFailed(String)
   LessonsLoaded(String)
   LessonsFailed(String)
   LessonLoaded(String)
@@ -109,6 +115,8 @@ struct Model {
   role : String
   class_level : String
   subjects : Array[SubjectInfo]
+  classes : Array[String]
+  terms : Array[String]
   lessons : Array[LessonInfo]
   current_lesson : Option[LessonContent]
   loading : Bool
@@ -123,6 +131,8 @@ fn init_model() -> Model {
     role: "student",
     class_level: "",
     subjects: [],
+    classes: [],
+    terms: [],
     lessons: [],
     current_lesson: None,
     loading: false,
@@ -174,7 +184,6 @@ fn role_from_jwt(token : String) -> String {
 ///|
 fn route_from_path(path : String) -> Route {
   let path = if path.has_prefix("/") { path } else { "/" + path }
-  // Remove trailing slash for consistent matching
   let path = if path.length() > 1 && path.has_suffix("/") {
     path[:path.length() - 1].to_owned()
   } else {
@@ -183,7 +192,9 @@ fn route_from_path(path : String) -> Route {
   let segments = path.split("/").to_array()
   match segments {
     ["", ""] => Home
-    ["", "subjects", id] => SubjectDetail(id.to_owned())
+    ["", "class", id] => ClassDetail(id.to_owned())
+    ["", "class", cl, sub] => SubjectDetail(cl.to_owned(), sub.to_owned())
+    ["", "class", cl, sub, term] => TermDetail(cl.to_owned(), sub.to_owned(), term.to_owned())
     ["", "lessons", id] => LessonDetail(id.to_owned())
     ["", "admin"] => Admin
     ["", "login"] => Login
@@ -251,8 +262,14 @@ extern "js" fn js_get_query_param(name : String) -> String =
 extern "js" fn js_url_encode(s : String) -> String =
   #|(s) => { try { return encodeURIComponent(s); } catch(e) { return s; } }
 
+#cfg(target="js")
+extern "js" fn js_url_decode(s : String) -> String =
+  #|(s) => { try { return decodeURIComponent(s); } catch(e) { return s; } }
+
 #cfg(not(target="js"))
 fn js_url_encode(s : String) -> String { s }
+#cfg(not(target="js"))
+fn js_url_decode(s : String) -> String { s }
 
 #cfg(target="js")
 extern "js" fn js_redirect(url : String) -> Unit =
@@ -416,6 +433,30 @@ fn parse_body_json(body : String) -> Result[Json, String] {
 }
 
 ///|
+fn parse_string_array(body : String) -> Array[String] {
+  let json = parse_body_json(body)
+  match json {
+    Ok(Json::Array(arr)) => {
+      let result : Array[String] = []
+      for item in arr {
+        match item {
+          Json::String(s) => result.push(s)
+          Json::Object(obj) => {
+            let cl = match obj.get("class_level") { Some(Json::String(s)) => s; _ => "" }
+            if cl != "" { result.push(cl) } else {
+              match obj.get("term") { Some(Json::String(s)) => result.push(s); _ => () }
+            }
+          }
+          _ => ()
+        }
+      }
+      result
+    }
+    _ => []
+  }
+}
+
+///|
 fn parse_subjects(body : String) -> Array[SubjectInfo] {
   let json = parse_body_json(body)
   match json {
@@ -550,8 +591,10 @@ fn week_str(week : Double) -> String {
 ///|
 fn route_cmd(emit : @cmd.Emit[Msg], token : String, route : Route) -> @cmd.Cmd {
   match route {
-    Home => fetch_cmd(emit, api_base() + "/subjects", "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
-    SubjectDetail(subject) => fetch_cmd(emit, api_base() + "/subjects/" + subject + "/lessons", "GET", token, fn(b) { LessonsLoaded(b) }, fn(e) { LessonsFailed(e) })
+    Home => fetch_cmd(emit, api_base() + "/classes", "GET", token, fn(b) { ClassesLoaded(b) }, fn(e) { ClassesFailed(e) })
+    ClassDetail(cl) => fetch_cmd(emit, api_base() + "/subjects?class=" + js_url_encode(cl), "GET", token, fn(b) { SubjectsLoaded(b) }, fn(e) { SubjectsFailed(e) })
+    SubjectDetail(cl, sub) => fetch_cmd(emit, api_base() + "/terms?class=" + js_url_encode(cl) + "&subject=" + js_url_encode(sub), "GET", token, fn(b) { TermsLoaded(b) }, fn(e) { TermsFailed(e) })
+    TermDetail(cl, sub, term) => fetch_cmd(emit, api_base() + "/subjects/" + js_url_encode(sub) + "/lessons?class=" + js_url_encode(cl) + "&term=" + js_url_encode(term), "GET", token, fn(b) { LessonsLoaded(b) }, fn(e) { LessonsFailed(e) })
     LessonDetail(id) => fetch_cmd(emit, api_base() + "/lessons/" + id, "GET", token, fn(b) { LessonLoaded(b) }, fn(e) { LessonFailed(e) })
     Admin => @cmd.none
     Login => @cmd.none
@@ -601,6 +644,12 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
         @url.UrlRequest::External(href) => (@nav.load(href), model)
       }
     }
+    ClassesLoaded(body) => {
+      let classes = parse_string_array(body)
+      (@cmd.none, { ..model, classes, loading: false, error: "" })
+    }
+    ClassesFailed(err) =>
+      (@cmd.none, { ..model, loading: false, error: "Failed to load classes: " + err })
     SubjectsLoaded(body) => {
       let subjects = parse_subjects(body)
       if subjects.length() == 0 && body != "" && body != "[]" {
@@ -611,6 +660,12 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
     }
     SubjectsFailed(err) =>
       (@cmd.none, { ..model, loading: false, error: "Failed to load subjects: " + err })
+    TermsLoaded(body) => {
+      let terms = parse_string_array(body)
+      (@cmd.none, { ..model, terms, loading: false, error: "" })
+    }
+    TermsFailed(err) =>
+      (@cmd.none, { ..model, loading: false, error: "Failed to load terms: " + err })
     LessonsLoaded(body) => {
       let lessons = parse_lessons(body)
       if lessons.length() == 0 && body != "" && body != "[]" {
@@ -759,7 +814,9 @@ fn view_nav(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 fn view_content(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   match model.route {
     Home => view_home(emit, model)
-    SubjectDetail(_) => view_subject(emit, model)
+    ClassDetail(cl) => view_class(emit, model, cl)
+    SubjectDetail(cl, sub) => view_subject(emit, model, cl, sub)
+    TermDetail(cl, sub, term) => view_term(emit, model, cl, sub, term)
     LessonDetail(_) => view_lesson(emit, model)
     Admin => view_admin()
     Login => view_login(emit, model)
@@ -788,9 +845,46 @@ fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   let _ = emit
   @html.div(
     [
-      @html.h1("Subjects"),
+      @html.h1("Classes"),
+      @html.p(style=["color: #666", "font-size: 14px", "margin-bottom: 12px"], "Select your class to view subjects and lessons."),
+      if model.classes.length() == 0 {
+        @html.p("No classes found.")
+      } else {
+        @html.ul(
+          style=["list-style: none", "padding: 0", "display: grid", "grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))", "gap: 12px"],
+          model.classes.map(fn(cl) {
+            let label = match cl {
+              "JSS_1" => "JSS 1"
+              "JSS_2" => "JSS 2"
+              "JSS_3" => "JSS 3"
+              "SS1" => "SS 1"
+              "SS2" => "SS 2"
+              "SS3" => "SS 3"
+              _ => cl
+            }
+            @html.li(
+              [@html.a(
+                href="/class/" + cl,
+                style=["display: block", "padding: 20px", "background: #f0f4ff", "border-radius: 8px", "text-decoration: none", "color: #333", "font-weight: 600", "text-align: center"],
+                label,
+              )],
+            )
+          }),
+        )
+      },
+    ],
+  )
+}
+
+///|
+fn view_class(emit : @cmd.Emit[Msg], model : Model, class_id : String) -> @html.Html {
+  let _ = emit
+  @html.div(
+    [
+      @html.a(href="/", style=["color: #666"], "\u2190 Back to classes"),
+      @html.h1("Subjects for " + class_id),
       if model.subjects.length() == 0 {
-        @html.p("No subjects found.")
+        @html.p("No subjects found for this class.")
       } else {
         @html.ul(
           style=["list-style: none", "padding: 0"],
@@ -798,7 +892,7 @@ fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
             @html.li(
               style=["margin: 8px 0"],
               [@html.a(
-                href="/subjects/" + s.id,
+                href="/class/" + class_id + "/" + s.name,
                 style=["display: block", "padding: 12px 16px", "background: #f8f9fa", "border-radius: 6px", "text-decoration: none", "color: #333"],
                 s.name,
               )],
@@ -811,12 +905,36 @@ fn view_home(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
 }
 
 ///|
-fn view_subject(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
+fn view_subject(emit : @cmd.Emit[Msg], model : Model, class_id : String, subject_id : String) -> @html.Html {
   let _ = emit
-  let subject_id = match model.route {
-    SubjectDetail(id) => id
-    _ => ""
-  }
+  @html.div(
+    [
+      @html.a(href="/class/" + class_id, style=["color: #666"], "\u2190 Back to subjects"),
+      @html.h1(js_url_decode(subject_id)),
+      @html.p(style=["color: #666"], "Class: " + class_id),
+      if model.terms.length() == 0 {
+        @html.p("No terms found for this subject.")
+      } else {
+        @html.ul(
+          style=["list-style: none", "padding: 0", "display: flex", "gap: 12px", "flex-wrap: wrap"],
+          model.terms.map(fn(term) {
+            @html.li(
+              [@html.a(
+                href="/class/" + class_id + "/" + subject_id + "/" + term,
+                style=["display: block", "padding: 16px 24px", "background: #f0f4ff", "border-radius: 8px", "text-decoration: none", "color: #333", "font-weight: 500"],
+                term + " Term",
+              )],
+            )
+          }),
+        )
+      },
+    ],
+  )
+}
+
+///|
+fn view_term(emit : @cmd.Emit[Msg], model : Model, class_id : String, subject_id : String, term_id : String) -> @html.Html {
+  let _ = emit
   let is_teacher = model.role == "teacher" || model.role == "admin"
   let visible_lessons = if is_teacher {
     model.lessons
@@ -825,13 +943,14 @@ fn view_subject(emit : @cmd.Emit[Msg], model : Model) -> @html.Html {
   }
   @html.div(
     [
-      @html.a(href="/", style=["color: #666"], "\u2190 Back to subjects"),
-      @html.h1("Lessons for " + subject_id),
+      @html.a(href="/class/" + class_id + "/" + subject_id, style=["color: #666"], "\u2190 Back to terms"),
+      @html.h1("Lessons for " + js_url_decode(subject_id)),
+      @html.p(style=["color: #666"], "Class: " + class_id + " \u00b7 " + term_id + " Term"),
       if visible_lessons.length() == 0 {
         let msg = if is_teacher {
-          "No lessons found for this subject."
+          "No lessons found for this term."
         } else {
-          "No active lessons available for this subject. Check back later or contact your teacher."
+          "No active lessons available for this term. Check back later or contact your teacher."
         }
         @html.p(msg)
       } else {

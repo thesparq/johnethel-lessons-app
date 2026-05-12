@@ -91,6 +91,56 @@ fn init{
       },
       methods: [
         {
+          name: "get_classes",
+          description: "get_classes",
+          http_endpoint: [],
+          prompt_hint: None,
+          input_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "class_level",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
+          output_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "result",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
+        },
+        {
+          name: "get_terms",
+          description: "get_terms",
+          http_endpoint: [],
+          prompt_hint: None,
+          input_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "class_level",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+            (
+              "subject",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
+          output_schema: @rpcTypes.DataSchema::Tuple([
+            (
+              "result",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+          ]),
+        },
+        {
           name: "get_subjects",
           description: "get_subjects",
           http_endpoint: [],
@@ -126,6 +176,12 @@ fn init{
             ),
             (
               "class_level",
+              @schema.schema_of_tag(
+                (@schema.TypeTag::{  } : @schema.TypeTag[String]),
+              ),
+            ),
+            (
+              "term",
               @schema.schema_of_tag(
                 (@schema.TypeTag::{  } : @schema.TypeTag[String]),
               ),
@@ -250,6 +306,29 @@ impl @agents.RawAgent for UserAgent with invoke(
 ) {
   try {
     match method_name {
+      "get_classes" => {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 1 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 1 elements, got " + elements.length().to_string(),
+          )
+        }
+        let class_level :String = @schema.from_element_value_as(elements[0])
+        let result = self.get_classes(class_level)
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
+      }
+      "get_terms" => {
+        let elements = @extractor.extract_tuple(input)
+        guard elements.length() == 2 else {
+          raise  @common.AgentError::InvalidInput(
+            "Expected 2 elements, got " + elements.length().to_string(),
+          )
+        }
+        let class_level :String = @schema.from_element_value_as(elements[0])
+        let subject :String = @schema.from_element_value_as(elements[1])
+        let result = self.get_terms(class_level, subject)
+        Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
+      }
       "get_subjects" => {
         let elements = @extractor.extract_tuple(input)
         guard elements.length() == 1 else {
@@ -263,14 +342,15 @@ impl @agents.RawAgent for UserAgent with invoke(
       }
       "get_lessons" => {
         let elements = @extractor.extract_tuple(input)
-        guard elements.length() == 2 else {
+        guard elements.length() == 3 else {
           raise  @common.AgentError::InvalidInput(
-            "Expected 2 elements, got " + elements.length().to_string(),
+            "Expected 3 elements, got " + elements.length().to_string(),
           )
         }
         let subject :String = @schema.from_element_value_as(elements[0])
         let class_level :String = @schema.from_element_value_as(elements[1])
-        let result = self.get_lessons(subject, class_level)
+        let term :String = @schema.from_element_value_as(elements[2])
+        let result = self.get_lessons(subject, class_level, term)
         Ok(@rpcTypes.DataValue::Tuple([@schema.to_element_value_as(result)]))
       }
       "get_lesson" => {
