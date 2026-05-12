@@ -434,22 +434,21 @@ fn parse_body_json(body : String) -> Result[Json, String] {
 
 ///|
 fn parse_string_array(body : String) -> Array[String] {
-  let json = parse_body_json(body)
+  // Golem wraps String returns as JSON strings — try unwrap first
+  let json = @json.parse(body) catch { _ => return [] }
+  let json = match json {
+    Json::String(s) => @json.parse(s) catch { _ => return [] }
+    j => j
+  }
   match json {
-    Ok(Json::Array(arr)) => {
+    Json::Array(arr) => {
       let result : Array[String] = []
       for item in arr {
         match item {
           Json::String(s) => result.push(s)
           Json::Object(obj) => {
-            let mut pushed = false
-            for pair in obj {
-              match pair.1 {
-                Json::String(s) => { result.push(s); pushed = true }
-                _ => ()
-              }
-              if pushed { break }
-            }
+            match obj.get("term") { Some(Json::String(s)) => result.push(s); _ => () }
+            match obj.get("class_level") { Some(Json::String(s)) => result.push(s); _ => () }
           }
           _ => ()
         }
