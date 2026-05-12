@@ -652,15 +652,14 @@ fn update(emit : @cmd.Emit[Msg], msg : Msg, model : Model) -> (@cmd.Cmd, Model) 
       (@cmd.none, { ..model, loading: false, error: "Failed to load classes: " + err })
     SubjectsLoaded(body) => {
       let subjects = parse_subjects(body)
-      // Deduplicate by case-insensitive name
-      let seen : Map[String, Bool] = {}
       let deduped : Array[SubjectInfo] = []
       for s in subjects {
+        let mut found = false
         let key = s.name.to_lower()
-        match seen.get(key) {
-          Some(_) => ()
-          None => { seen[key] = true; deduped.push(s) }
+        for d in deduped {
+          if d.name.to_lower() == key { found = true; break }
         }
+        if !found { deduped.push(s) }
       }
       if subjects.length() == 0 && body != "" && body != "[]" {
         (@cmd.none, { ..model, loading: false, error: "Failed to parse subjects data" })
