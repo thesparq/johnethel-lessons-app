@@ -49,8 +49,46 @@ fn user_of(p : @common.Principal) -> String {
 ///|
 fn auth_ok(p : @common.Principal, h : String?) -> Bool {
   match h {
-    Some(header) => header != ""
+    Some(header) => if header == "" { false } else {
+      match p {
+        @common.Principal::Oidc(_) => role_of(p) != "anonymous"
+        _ => parse_role_from_header(header) != "anonymous"
+      }
+    }
     None => false
+  }
+}
+
+///|
+fn parse_role_from_header(h : String) -> String {
+  let token = if h.has_prefix("Bearer ") { h["Bearer ".length():].to_owned() } else { h }
+  if !token.contains(".") { return "anonymous" }
+  let parts = token.split(".").to_array()
+  if parts.length() < 2 { return "anonymous" }
+  // base64url → base64 (manual: no String.replace in WASM)
+  let raw = parts[1].to_owned()
+  let mut b64 = ""
+  let chars = raw.to_array()
+  for i = 0; i < chars.length(); i = i + 1 {
+    let c = chars[i]
+    if c == '-' { b64 = b64 + "+" } else if c == '_' { b64 = b64 + "/" } else { b64 = b64 + c.to_string() }
+  }
+  let pad = (4 - b64.length() % 4) % 4
+  for _i = 0; _i < pad; _i = _i + 1 { b64 = b64 + "=" }
+  let bytes = @base64.decode(b64) catch { _ => return "anonymous" }
+  let decoded = @utf8.decode_lossy(bytes.view())
+  let json = @json.parse(decoded) catch { _ => return "anonymous" }
+  match json {
+    Json::Object(obj) => match obj.get("groups") {
+      Some(Json::Array(groups)) => {
+        for g in groups { match g { Json::String("admin") => return "admin"; _ => () } }
+        for g in groups { match g { Json::String("teachers") => return "teacher"; _ => () } }
+        for g in groups { match g { Json::String("students") => return "student"; _ => () } }
+        "anonymous"
+      }
+      _ => "anonymous"
+    }
+    _ => "anonymous"
   }
 }
 
