@@ -1,54 +1,48 @@
 ///|
 /// User agent — durable per-user instance with caching and HTTP endpoints.
-/// Only authenticated users (via OIDC Principal) can access protected endpoints.
-/// Anonymous requests are rejected (except /config which has endpoint_auth(false)).
+/// Role extracted from Principal in constructor, stored for endpoint checks.
 #derive.agent
 #derive.mount("/")
 #derive.mount_cors("*")
 struct UserAgent {
   principal : @common.Principal
+  role : String
   // Cache: key → (json_data, expiry_seconds)
   cache : Map[String, (String, UInt64)]
 }
 
 ///|
 fn UserAgent::new(principal : @common.Principal) -> UserAgent {
-  { principal, cache: {} }
-}
-
-///|
-fn role_of(p : @common.Principal) -> String {
-  match p {
+  let role = match principal {
     @common.Principal::Oidc(oidc) => {
-      let json = @json.parse(oidc.claims) catch { _ => return "anonymous" }
+      let json = @json.parse(oidc.claims) catch { _ => "anonymous" }
       match json {
         Json::Object(obj) => match obj.get("groups") {
           Some(Json::Array(groups)) => {
-            for g in groups { match g { Json::String("admin") => return "admin"; _ => () } }
-            for g in groups { match g { Json::String("teachers") => return "teacher"; _ => () } }
-            for g in groups { match g { Json::String("students") => return "student"; _ => () } }
-            "anonymous"
+            let mut r = "anonymous"
+            for g in groups {
+              match g {
+                Json::String("admin") => { r = "admin"; break }
+                Json::String("teachers") => { r = "teacher"; break }
+                Json::String("students") => { r = "student"; break }
+                _ => ()
+              }
+            }
+            r
           }
           _ => "anonymous"
         }
         _ => "anonymous"
       }
     }
-    @common.Principal::Anonymous | @common.Principal::Agent(_) | @common.Principal::GolemUser(_) => "anonymous"
-  }
-}
-
-///|
-fn user_of(p : @common.Principal) -> String {
-  match p {
-    @common.Principal::Oidc(oidc) => if oidc.sub != "" { oidc.sub } else { "anonymous" }
     _ => "anonymous"
   }
+  { principal, role, cache: {} }
 }
 
 ///|
-fn auth_ok(p : @common.Principal) -> Bool {
-  role_of(p) != "anonymous"
+fn auth_ok(s : UserAgent) -> Bool {
+  s.role != "anonymous"
 }
 
 ///|
@@ -384,7 +378,7 @@ pub fn UserAgent::get_lessons(self : Self, subject : String, class_level : Strin
   let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE string::lowercase(subject) = '" + subject.to_lower() + "'" + filter + term_filter + "ORDER BY week;"
   match query_result(sql) {
     Ok(result) => {
-      let json_str = if role_of(self.principal) == "student" {
+      let json_str = if self.role == "student" {
         match result {
           Json::Array(arr) => {
             let filtered = arr.filter(fn(item) {
@@ -426,7 +420,7 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
       let json_str = match result {
         Json::Array(arr) => {
           if arr.length() > 0 {
-            if role_of(self.principal) == "student" {
+            if self.role == "student" {
               let filtered = filter_lesson_fields(arr[0])
               Json::array([filtered]).stringify()
             } else {
@@ -450,7 +444,7 @@ pub fn UserAgent::get_lesson(self : Self, lesson_id : String) -> String {
 /// Updates SurrealDB directly. Returns new active value.
 pub fn UserAgent::toggle_lesson(self : Self, lesson_id : String) -> Bool {
   if !validate_lesson_id(lesson_id) { return false }
-  if role_of(self.principal) != "teacher" && role_of(self.principal) != "admin" { return false }
+  if self.role != "teacher" && self.role != "admin" { return false }
   // Read current state and subject
   let select_sql = "SELECT active, subject FROM " + lesson_id + ";"
   let (current, subject) = match query_result(select_sql) {
@@ -517,7 +511,7 @@ pub fn UserAgent::http_config(self : Self) -> String {
 #derive.endpoint(get="/classes")
 #derive.endpoint_auth(true)
 pub fn UserAgent::http_classes(self : Self) -> String {
-  if !auth_ok(self.principal) { return auth_error() }
+  if !auth_ok(self) { return auth_error() }
   self.get_classes("")
 }
 
@@ -526,7 +520,7 @@ pub fn UserAgent::http_classes(self : Self) -> String {
 #derive.endpoint(get="/subjects?class={class_level}")
 #derive.endpoint_auth(true)
 pub fn UserAgent::http_subjects(self : Self, class_level : String) -> String {
-  if !auth_ok(self.principal) { return auth_error() }
+  if !auth_ok(self) { return auth_error() }
   self.get_subjects(class_level)
 }
 
@@ -535,7 +529,7 @@ pub fn UserAgent::http_subjects(self : Self, class_level : String) -> String {
 #derive.endpoint(get="/terms?class={class_level}&subject={subject}")
 #derive.endpoint_auth(true)
 pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String) -> String {
-  if !auth_ok(self.principal) { return auth_error() }
+  if !auth_ok(self) { return auth_error() }
   if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
   self.get_terms(class_level, subject)
 }
@@ -545,7 +539,7 @@ pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String
 #derive.endpoint(get="/subjects/{subject_id}/lessons?class={class_level}&term={term}")
 #derive.endpoint_auth(true)
 pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : String, term : String) -> String {
-  if !auth_ok(self.principal) { return auth_error() }
+  if !auth_ok(self) { return auth_error() }
   if !validate_subject_name(subject_id) { return "{\"error\":\"Invalid subject name\"}" }
   self.get_lessons(subject_id, class_level, term)
 }
@@ -555,7 +549,7 @@ pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : S
 #derive.endpoint(get="/lessons/{lesson_id}")
 #derive.endpoint_auth(true)
 pub fn UserAgent::http_lesson(self : Self, lesson_id : String) -> String {
-  if !auth_ok(self.principal) { return auth_error() }
+  if !auth_ok(self) { return auth_error() }
   if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
   self.get_lesson(lesson_id)
 }
@@ -565,9 +559,9 @@ pub fn UserAgent::http_lesson(self : Self, lesson_id : String) -> String {
 #derive.endpoint(post="/lessons/{lesson_id}/toggle")
 #derive.endpoint_auth(true)
 pub fn UserAgent::http_toggle_lesson(self : Self, lesson_id : String) -> String {
-  if !auth_ok(self.principal) { return auth_error() }
+  if !auth_ok(self) { return auth_error() }
   if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
-  let r = role_of(self.principal)
+  let r = self.role
   if r != "teacher" && r != "admin" { return "{\"error\":\"Forbidden: teachers only\"}" }
   let toggled = self.toggle_lesson(lesson_id)
   "{\"toggled\":" + toggled.to_string() + "}"
