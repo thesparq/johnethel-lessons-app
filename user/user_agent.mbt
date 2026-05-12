@@ -22,9 +22,9 @@ fn UserAgent::new(principal : @common.Principal) -> UserAgent {
             let mut r = "anonymous"
             for g in groups {
               match g {
-                Json::String("admin") => { r = "admin"; break }
-                Json::String("teachers") => { r = "teacher"; break }
-                Json::String("students") => { r = "student"; break }
+                Json::String("admin") => r = "admin"
+                Json::String("teachers") => if r != "admin" { r = "teacher" }
+                Json::String("students") => if r == "anonymous" { r = "student" }
                 _ => ()
               }
             }
@@ -41,8 +41,50 @@ fn UserAgent::new(principal : @common.Principal) -> UserAgent {
 }
 
 ///|
-fn auth_ok(s : UserAgent) -> Bool {
-  s.role != "anonymous"
+fn role_from_header(h : String) -> String {
+  let token = if h.has_prefix("Bearer ") { h["Bearer ".length():].to_owned() } else { h }
+  if !token.contains(".") { return "anonymous" }
+  let parts = token.split(".").to_array()
+  if parts.length() < 2 { return "anonymous" }
+  let raw = parts[1].to_owned()
+  let mut b64 = ""
+  let chars = raw.to_array()
+  for i = 0; i < chars.length(); i = i + 1 {
+    let c = chars[i]
+    if c == '-' { b64 = b64 + "+" } else if c == '_' { b64 = b64 + "/" } else { b64 = b64 + c.to_string() }
+  }
+  let pad = (4 - b64.length() % 4) % 4
+  for _i = 0; _i < pad; _i = _i + 1 { b64 = b64 + "=" }
+  let bytes = @base64.decode(b64) catch { _ => return "anonymous" }
+  let decoded = @utf8.decode_lossy(bytes.view())
+  let json = @json.parse(decoded) catch { _ => return "anonymous" }
+  match json {
+    Json::Object(obj) => match obj.get("groups") {
+      Some(Json::Array(groups)) => {
+        let mut r = "anonymous"
+        for g in groups {
+          match g {
+            Json::String("admin") => r = "admin"
+            Json::String("teachers") => if r != "admin" { r = "teacher" }
+            Json::String("students") => if r == "anonymous" { r = "student" }
+            _ => ()
+          }
+        }
+        r
+      }
+      _ => "anonymous"
+    }
+    _ => "anonymous"
+  }
+}
+
+///|
+fn check_auth(s : UserAgent, h : String?) -> Bool {
+  if s.role != "anonymous" { return true }
+  match h {
+    Some(header) => role_from_header(header) != "anonymous"
+    None => false
+  }
 }
 
 ///|
@@ -510,11 +552,10 @@ pub fn UserAgent::http_config(self : Self) -> String {
 /// Return classes (whitelist filtered in frontend).
 #derive.endpoint(get="/classes")
 #derive.endpoint_header("Authorization", "auth_header")
-#derive.endpoint_auth(true)
 #derive.endpoint_cors("*")
 pub fn UserAgent::http_classes(self : Self, auth_header : String?) -> String {
   ignore(auth_header)
-  if !auth_ok(self) { return auth_error() }
+  if !check_auth(self, auth_header) { return auth_error() }
   self.get_classes("")
 }
 
@@ -522,11 +563,10 @@ pub fn UserAgent::http_classes(self : Self, auth_header : String?) -> String {
 /// Return subjects for a class.
 #derive.endpoint(get="/subjects?class={class_level}")
 #derive.endpoint_header("Authorization", "auth_header")
-#derive.endpoint_auth(true)
 #derive.endpoint_cors("*")
 pub fn UserAgent::http_subjects(self : Self, class_level : String, auth_header : String?) -> String {
   ignore(auth_header)
-  if !auth_ok(self) { return auth_error() }
+  if !check_auth(self, auth_header) { return auth_error() }
   self.get_subjects(class_level)
 }
 
@@ -534,11 +574,10 @@ pub fn UserAgent::http_subjects(self : Self, class_level : String, auth_header :
 /// Return terms for a class + subject.
 #derive.endpoint(get="/terms?class={class_level}&subject={subject}")
 #derive.endpoint_header("Authorization", "auth_header")
-#derive.endpoint_auth(true)
 #derive.endpoint_cors("*")
 pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String, auth_header : String?) -> String {
   ignore(auth_header)
-  if !auth_ok(self) { return auth_error() }
+  if !check_auth(self, auth_header) { return auth_error() }
   if !validate_subject_name(subject) { return "{\"error\":\"Invalid subject name\"}" }
   self.get_terms(class_level, subject)
 }
@@ -547,11 +586,10 @@ pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String
 /// List lessons for a subject.
 #derive.endpoint(get="/subjects/{subject_id}/lessons?class={class_level}&term={term}")
 #derive.endpoint_header("Authorization", "auth_header")
-#derive.endpoint_auth(true)
 #derive.endpoint_cors("*")
 pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : String, term : String, auth_header : String?) -> String {
   ignore(auth_header)
-  if !auth_ok(self) { return auth_error() }
+  if !check_auth(self, auth_header) { return auth_error() }
   if !validate_subject_name(subject_id) { return "{\"error\":\"Invalid subject name\"}" }
   self.get_lessons(subject_id, class_level, term)
 }
@@ -560,11 +598,10 @@ pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : S
 /// Get full lesson content.
 #derive.endpoint(get="/lessons/{lesson_id}")
 #derive.endpoint_header("Authorization", "auth_header")
-#derive.endpoint_auth(true)
 #derive.endpoint_cors("*")
 pub fn UserAgent::http_lesson(self : Self, lesson_id : String, auth_header : String?) -> String {
   ignore(auth_header)
-  if !auth_ok(self) { return auth_error() }
+  if !check_auth(self, auth_header) { return auth_error() }
   if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
   self.get_lesson(lesson_id)
 }
@@ -573,11 +610,10 @@ pub fn UserAgent::http_lesson(self : Self, lesson_id : String, auth_header : Str
 /// Toggle lesson active state (teacher or admin only).
 #derive.endpoint(post="/lessons/{lesson_id}/toggle")
 #derive.endpoint_header("Authorization", "auth_header")
-#derive.endpoint_auth(true)
 #derive.endpoint_cors("*")
 pub fn UserAgent::http_toggle_lesson(self : Self, lesson_id : String, auth_header : String?) -> String {
   ignore(auth_header)
-  if !auth_ok(self) { return auth_error() }
+  if !check_auth(self, auth_header) { return auth_error() }
   if !validate_lesson_id(lesson_id) { return "{\"error\":\"Invalid lesson ID\"}" }
   let r = self.role
   if r != "teacher" && r != "admin" { return "{\"error\":\"Forbidden: teachers only\"}" }
