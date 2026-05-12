@@ -511,7 +511,6 @@ pub fn UserAgent::http_config(self : Self) -> String {
 #derive.endpoint(get="/classes")
 #derive.endpoint_header("Authorization", "auth_header")
 #derive.endpoint_auth(true)
-#derive.endpoint_cors("*")
 pub fn UserAgent::http_classes(self : Self, auth_header : String?) -> String {
   ignore(auth_header)
   if !auth_ok(self) { return auth_error() }
@@ -523,7 +522,6 @@ pub fn UserAgent::http_classes(self : Self, auth_header : String?) -> String {
 #derive.endpoint(get="/subjects?class={class_level}")
 #derive.endpoint_header("Authorization", "auth_header")
 #derive.endpoint_auth(true)
-#derive.endpoint_cors("*")
 pub fn UserAgent::http_subjects(self : Self, class_level : String, auth_header : String?) -> String {
   ignore(auth_header)
   if !auth_ok(self) { return auth_error() }
@@ -535,7 +533,6 @@ pub fn UserAgent::http_subjects(self : Self, class_level : String, auth_header :
 #derive.endpoint(get="/terms?class={class_level}&subject={subject}")
 #derive.endpoint_header("Authorization", "auth_header")
 #derive.endpoint_auth(true)
-#derive.endpoint_cors("*")
 pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String, auth_header : String?) -> String {
   ignore(auth_header)
   if !auth_ok(self) { return auth_error() }
@@ -548,7 +545,6 @@ pub fn UserAgent::http_terms(self : Self, class_level : String, subject : String
 #derive.endpoint(get="/subjects/{subject_id}/lessons?class={class_level}&term={term}")
 #derive.endpoint_header("Authorization", "auth_header")
 #derive.endpoint_auth(true)
-#derive.endpoint_cors("*")
 pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : String, term : String, auth_header : String?) -> String {
   ignore(auth_header)
   if !auth_ok(self) { return auth_error() }
@@ -561,7 +557,6 @@ pub fn UserAgent::http_lessons(self : Self, subject_id : String, class_level : S
 #derive.endpoint(get="/lessons/{lesson_id}")
 #derive.endpoint_header("Authorization", "auth_header")
 #derive.endpoint_auth(true)
-#derive.endpoint_cors("*")
 pub fn UserAgent::http_lesson(self : Self, lesson_id : String, auth_header : String?) -> String {
   ignore(auth_header)
   if !auth_ok(self) { return auth_error() }
@@ -574,7 +569,6 @@ pub fn UserAgent::http_lesson(self : Self, lesson_id : String, auth_header : Str
 #derive.endpoint(post="/lessons/{lesson_id}/toggle")
 #derive.endpoint_header("Authorization", "auth_header")
 #derive.endpoint_auth(true)
-#derive.endpoint_cors("*")
 pub fn UserAgent::http_toggle_lesson(self : Self, lesson_id : String, auth_header : String?) -> String {
   ignore(auth_header)
   if !auth_ok(self) { return auth_error() }
