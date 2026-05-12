@@ -311,7 +311,7 @@ pub fn UserAgent::get_terms(self : Self, class_level : String, subject : String)
     Some(cached) => return cached
     None => ()
   }
-  let sql = "SELECT term FROM lesson_content WHERE class_level = '" + class_level + "' AND subject = '" + subject + "' GROUP BY term ORDER BY term;"
+  let sql = "SELECT term FROM lesson_content WHERE class_level = '" + class_level + "' AND string::lowercase(subject) = '" + subject.to_lower() + "' GROUP BY term ORDER BY term;"
   match query_result(sql) {
     Ok(result) => {
       let json_str = result.stringify()
@@ -351,7 +351,7 @@ pub fn UserAgent::get_lessons(self : Self, subject : String, class_level : Strin
   }
   let filter = if class_level != "" { " AND class_level = '" + class_level + "' " } else { "" }
   let term_filter = if term != "" { " AND term = '" + term + "' " } else { "" }
-  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE subject = '" + subject + "'" + filter + term_filter + "ORDER BY week;"
+  let sql = "SELECT id, topic_title, week, term, subject, active FROM lesson_content WHERE string::lowercase(subject) = '" + subject.to_lower() + "'" + filter + term_filter + "ORDER BY week;"
   match query_result(sql) {
     Ok(result) => {
       let json_str = if self.role == "student" {
